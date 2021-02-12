@@ -6,7 +6,7 @@ import numpy as np
 
 
 
-database_path = "../../datasets/Andersson/kinect_gait_json_dataset/"
+database_path = "../../../datasets/Andersson/kinect_gait_json_dataset/"
 train_database_path = database_path + "train/"
 val_database_path = database_path + "val/"
 test_database_path = database_path + "test/"
@@ -23,6 +23,7 @@ class Andersson_dataset(Dataset):
         self.window_size = window_size
         self.keypoints_num = 20
         self.track_num = 170
+        self.device = torch.device('cuda:0')
 
         if self.mode == 'train':
             self.json_path = train_json_path
@@ -40,8 +41,9 @@ class Andersson_dataset(Dataset):
 
     def _create_dataset(self):
         #print(len(self.json_path))
-        for i, json_file in enumerate(self.json_path[0:100]):
-            #print(i)
+        # TODO Change range if RAM has been upgraded
+        for i, json_file in enumerate(self.json_path[50:150]):
+            print(json_file)
             with open(json_file) as f:
                 current_dictionary = json.load(f)
             
@@ -66,8 +68,8 @@ class Andersson_dataset(Dataset):
         annotations.sort(key=lambda x: x["id"])
 
         # Min-Max normalizing 
-        xs = np.array([annotation["keypoints"][0::3] for annotation in annotations]).flatten()# / 1920
-        ys = np.array([annotation["keypoints"][1::3] for annotation in annotations]).flatten()# / 1080
+        xs = np.array([annotation["keypoints"][0::3] for annotation in annotations]).flatten() / 1920
+        ys = np.array([annotation["keypoints"][1::3] for annotation in annotations]).flatten() / 1080
         
         # Concatenating xs and ys in the following order: xs[0], ys[0], xs[1], ys[1], ...
         xys = np.ravel([xs,ys],'F')
@@ -88,8 +90,8 @@ class Andersson_dataset(Dataset):
                       
         tensor_current_window = torch.as_tensor(current_numpy_window, dtype=torch.float32).to(device=self.device)
         
-        #tensor_one_hot_mask = torch.as_tensor(numpy_one_hot_mask, dtype=torch.float32).to(device=self.device)
-        tensor_one_hot_mask = torch.as_tensor(current_numpy_one_hot_mask, dtype=torch.long).to(device=self.device)               
+        tensor_one_hot_mask = torch.as_tensor(current_numpy_one_hot_mask, dtype=torch.float32).to(device=self.device)
+        #tensor_one_hot_mask = torch.as_tensor(current_numpy_one_hot_mask, dtype=torch.long).to(device=self.device)               
 
         return tensor_current_window, tensor_one_hot_mask
 
@@ -111,4 +113,5 @@ class Andersson_dataset(Dataset):
 
 if __name__=="__main__":
     ds = Andersson_dataset(mode="train", window_size=80)
+    print(len(ds))
     
