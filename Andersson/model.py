@@ -18,11 +18,11 @@ class LSTM(nn.Module):
 
     self.device = torch.device('cuda:0')
 
-    self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size, num_layers=n_layers, batch_first=True) #,dropout=0.3)
+    self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size, num_layers=n_layers, batch_first=True,dropout=0.3)
 
     self.linear = nn.Linear(in_features=hidden_size, out_features=num_classes)
 
-    self.softmax = nn.Softmax(dim=0)
+    self.softmax = nn.Softmax(dim=1)
 
   def _reset_hidden_state(self, batch_size):
     hidden = (torch.zeros(self.n_layers, batch_size, self.hidden_size).to(device=self.device),
@@ -47,7 +47,7 @@ class LSTM(nn.Module):
     # Output shape: (batch_size, num_classes)
     out = self.linear(out)
 
-    #out = self.softmax(out)
+    out = self.softmax(out)
 
     return out
 
