@@ -22,18 +22,23 @@ def train(batch_size=64, window_size=3, epochs=100):
     base_lr_rate = 1e-3
     weight_decay = 0.000016
 
-    model = LSTM(input_size=40, hidden_size=256, num_classes=170, n_layers=16).to(device=torch.device('cuda:0'))   
+    model = LSTM(input_size=40, hidden_size=128, num_classes=170, n_layers=8).to(device=torch.device('cuda:0'))   
 
+    '''
     for name, param in model.named_parameters():
         if 'bias' in name:
             nn.init.constant_(param, 0.0)
         elif 'weight' in name:
             nn.init.xavier_uniform_(param)
+    '''
 
     #criterion = nn.BCEWithLogitsLoss()
     #criterion = nn.CrossEntropyLoss()
     criterion = nn.BCELoss()
     optimizer = optim.Adam(model.parameters(), lr=base_lr_rate)#, weight_decay=weight_decay, amsgrad=True)
+
+    best_epoch_train_accuracy                   = 0.0
+    best_epoch_val_accuracy                     = 0.0
 
     for current_epoch in range(epochs):
 
@@ -95,13 +100,19 @@ def train(batch_size=64, window_size=3, epochs=100):
 
                         if current_train_iter % 10 == 0:
                             #print(outs)
-                            print(f"\nITER#{current_train_iter} BATCH TRAIN ACCURACY: {batch_accuracy}, RUNNING TRAIN LOSS: {loss.item()}")
+                            print(f"\nITER#{current_train_iter} ({current_epoch+1}) BATCH TRAIN ACCURACY: {batch_accuracy:.4f}, RUNNING TRAIN LOSS: {loss.item():.8f}")
                             print(f"Predicted / GT index:\n{pred_index}\n{gt_index}\n")
 
                 last_epoch_average_train_loss = current_average_train_loss
                 epoch_accuracy = (running_train_correct_preds / num_train_data) * 100
 
-                print(f"\n\nEPOCH#{current_epoch+1} EPOCH TRAIN ACCURACY: {epoch_accuracy}, AVERAGE TRAIN LOSS: {last_epoch_average_train_loss}\n\n")
+                print(f"\n\nEPOCH#{current_epoch+1} EPOCH TRAIN ACCURACY (BEST): {epoch_accuracy:.4f} ({best_epoch_train_accuracy:.4f}), AVERAGE TRAIN LOSS: {last_epoch_average_train_loss:.8f}\n\n")
+
+                if epoch_accuracy > best_epoch_train_accuracy:
+                    best_epoch_train_accuracy = epoch_accuracy
+                    torch.save(model.state_dict(), f"./model_params/train/train_lstm_epoch{current_epoch+1}_acc{best_epoch_train_accuracy:.4f}.pth")
+                    print("\n\nSAVED BASED ON TRAIN ACCURACY!\n\n")
+
 
                 train_time_elapsed = time.time() - train_epoch_since
             
@@ -135,16 +146,21 @@ def train(batch_size=64, window_size=3, epochs=100):
                         running_val_correct_preds += batch_correct_preds
 
                         if current_val_iter % 10 == 0:
-                            print(f"\nITER#{current_val_iter} BATCH VALIDATION ACCURACY: {batch_accuracy}, RUNNING VALIDATION LOSS: {val_loss.item()}")
+                            print(f"\nITER#{current_val_iter} ({current_epoch+1}) BATCH VALIDATION ACCURACY: {batch_accuracy:.4f}, RUNNING VALIDATION LOSS: {val_loss.item():.8f}")
                             print(f"Predicted / GT index:\n{pred_index}\n{gt_index}\n")
 
                     last_epoch_average_val_loss = current_average_val_loss
                     epoch_accuracy = (running_val_correct_preds / num_val_data) * 100
-                    print(f"\n\nEPOCH#{current_epoch+1} EPOCH VALIDATION ACCURACY: {epoch_accuracy}, AVERAGE VALIDATION LOSS: {last_epoch_average_val_loss}\n\n")
+                    print(f"\n\nEPOCH#{current_epoch+1} EPOCH VALIDATION ACCURACY (BEST): {epoch_accuracy:.4f} ({best_epoch_val_accuracy:.4f}), AVERAGE VALIDATION LOSS: {last_epoch_average_val_loss:.8f}\n\n")
+
+                    if epoch_accuracy > best_epoch_val_accuracy:
+                        best_epoch_val_accuracy = epoch_accuracy
+                        torch.save(model.state_dict(), f"./model_params/val/val_lstm_epoch{current_epoch+1}_acc{best_epoch_val_accuracy:.4f}.pth")
+                        print("\n\nSAVED BASED ON VAL ACCURACY!\n\n")
 
                     val_time_elapsed = time.time() - val_epoch_since
 
 
 if __name__ == "__main__":
-    train(batch_size=32, window_size=40, epochs=100)
+    train(batch_size=128, window_size=40, epochs=100)
     #2.52
