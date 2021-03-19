@@ -61,3 +61,32 @@ class LSTM(nn.Module):
     out = self.softmax(out)
 
     return out
+
+
+
+class LogisticRegression(nn.Module):
+  def __init__(self, num_keypoints, num_features, num_classes):
+    super(LogisticRegression, self).__init__()
+
+    self.linear = torch.nn.Linear(in_features=num_keypoints*num_features, out_features=num_classes)
+
+
+
+  def forward(self, x):
+    x = x.view(x.size(0), -1)
+    x = self.linear(x)
+    return x
+
+model_lr = LogisticRegression(num_keypoints=78, num_features=2, num_classes=170)
+model_lstm = LSTM(input_size=78, hidden_size=128, num_classes=170, n_layers=2).to(device=torch.device('cuda:0'))
+
+x_lr = torch.rand(10, 78, 2)
+y_lr = model_lr(x_lr)
+print(y_lr.shape)
+
+
+x_lstm = torch.rand(10, 40, 78).to(device=torch.device('cuda:0'))
+y_lstm = model_lstm(x_lstm)
+print(y_lstm.shape)
+
+

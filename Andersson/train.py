@@ -3,27 +3,25 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-import matplotlib.pyplot as plt
-import numpy as np
 import time
 import warnings
 from dataset import Andersson_dataset
-from model import LSTM
+from models import LSTM, LogisticRegression
 
 
 def train(batch_size=64, window_size=3, epochs=100):
 
-    train_dataset = Andersson_dataset(mode='train', window_size=window_size)
+    train_dataset = Andersson_dataset(mode='train', window_size=window_size, log_reg=True)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
-    val_dataset = Andersson_dataset(mode='val', window_size=window_size)
+    val_dataset = Andersson_dataset(mode='val', window_size=window_size, log_reg=True)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True)
 
     base_lr_rate = 1e-3
-    weight_decay = 0.000016
+    weight_decay = 1e-6 #0.000016
 
-    model = LSTM(input_size=40, hidden_size=128, num_classes=170, n_layers=8).to(device=torch.device('cuda:0'))   
-
+    #model = LSTM(input_size=78, hidden_size=128, num_classes=170, n_layers=2).to(device=torch.device('cuda:0'))   
+    model = LogisticRegression(num_keypoints=78, num_features=2, num_classes=170).to(device=torch.device('cuda:0'))
     '''
     for name, param in model.named_parameters():
         if 'bias' in name:
@@ -32,9 +30,9 @@ def train(batch_size=64, window_size=3, epochs=100):
             nn.init.xavier_uniform_(param)
     '''
 
-    #criterion = nn.BCEWithLogitsLoss()
-    #criterion = nn.CrossEntropyLoss()
-    criterion = nn.BCELoss()
+    criterion = nn.BCEWithLogitsLoss()     # Use this for Logistic Regression training
+    #criterion = nn.BCELoss()               # Use this for LSTM training (with Softmax)
+    
     optimizer = optim.Adam(model.parameters(), lr=base_lr_rate)#, weight_decay=weight_decay, amsgrad=True)
 
     best_epoch_train_accuracy                   = 0.0
@@ -71,7 +69,7 @@ def train(batch_size=64, window_size=3, epochs=100):
 
                         current_train_iter += 1
 
-                        outs = model(train_batch_window)       
+                        outs = model(train_batch_window)
             
                         #scheduler = poly_lr_scheduler(optimizer = optimizer, init_lr = base_lr_rate, iter = current_iter, lr_decay_iter = 1, 
                         #                          max_iter = max_iter, power = power)                                                          # max_iter = len(train_loader)
@@ -110,7 +108,7 @@ def train(batch_size=64, window_size=3, epochs=100):
 
                 if epoch_accuracy > best_epoch_train_accuracy:
                     best_epoch_train_accuracy = epoch_accuracy
-                    torch.save(model.state_dict(), f"./model_params/train/train_lstm_epoch{current_epoch+1}_acc{best_epoch_train_accuracy:.4f}.pth")
+                    torch.save(model.state_dict(), f"./model_params/logistic_regression/train/train_logreg_epoch{current_epoch+1}_acc{best_epoch_train_accuracy:.4f}.pth")
                     print("\n\nSAVED BASED ON TRAIN ACCURACY!\n\n")
 
 
@@ -125,7 +123,6 @@ def train(batch_size=64, window_size=3, epochs=100):
                 with torch.no_grad():
                     for val_batch_window, val_batch_label in val_loader:
 
-                
                         current_val_iter += 1               
                         
                         outs = model(val_batch_window)
@@ -155,12 +152,12 @@ def train(batch_size=64, window_size=3, epochs=100):
 
                     if epoch_accuracy > best_epoch_val_accuracy:
                         best_epoch_val_accuracy = epoch_accuracy
-                        torch.save(model.state_dict(), f"./model_params/val/val_lstm_epoch{current_epoch+1}_acc{best_epoch_val_accuracy:.4f}.pth")
+                        torch.save(model.state_dict(), f"./model_params/logistic_regression/val/val_logreg_epoch{current_epoch+1}_acc{best_epoch_val_accuracy:.4f}.pth")
                         print("\n\nSAVED BASED ON VAL ACCURACY!\n\n")
 
                     val_time_elapsed = time.time() - val_epoch_since
 
 
 if __name__ == "__main__":
-    train(batch_size=128, window_size=40, epochs=100)
+    train(batch_size=64, window_size=40, epochs=100)
     #2.52

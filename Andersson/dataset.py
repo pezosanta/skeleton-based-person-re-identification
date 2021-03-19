@@ -23,12 +23,19 @@ test_json_path = natsorted(test_json_path)
 
 
 class Andersson_dataset(Dataset):
-    def __init__(self, mode, window_size=3):
-        self.mode = mode    
+    def __init__(self, mode, window_size=3, log_reg=False):
+        self.mode = mode
+        self.log_reg = log_reg
+        self.step_size = 10   
         self.window_size = window_size
-        self.keypoints_num = 20
+        self.keypoints_num = 39#20
         self.track_num = 170
         self.device = torch.device('cuda:0')
+
+        self.tree_structure = [ 10,1,0,1,3,5,7,9,7,5,3,1,
+                                2,4,6,8,6,4,2,1,10,11,13,
+                                15,17,19,17,15,13,11,12,14,
+                                16,18,16,14,12,11,10 ]
 
         if self.mode == 'train':
             self.json_path = train_json_path
@@ -48,15 +55,16 @@ class Andersson_dataset(Dataset):
 
     def _create_dataset(self):
         print(len(self.json_path))
-        # TODO Change range if RAM has been upgraded
+      
         for i, json_file in enumerate(self.json_path):
             print(i)
+
             with open(json_file) as f:
                 current_dictionary = json.load(f)
             
             current_annotations = current_dictionary["annotations"]
             current_track_id = int(current_annotations[0]["track_id"])
-
+            
             current_numpy_windows, current_numpy_one_hot_mask = self._create_sliding_window(current_annotations, current_track_id)
 
             if self.mode == "train":
@@ -81,7 +89,6 @@ class Andersson_dataset(Dataset):
                     else:
                         self.numpy_windows[2] = np.concatenate((self.numpy_windows[2], current_numpy_windows), axis=0)
                         self.numpy_one_hot_masks[2] = np.concatenate((self.numpy_one_hot_masks[2], current_numpy_one_hot_mask), axis=0)
-                #elif (3*len(self.json_path)/4) <= i < (len(self.json_path)):
                 else:
                     if len(self.numpy_windows) == 3 and len(self.numpy_one_hot_masks) == 3:
                         self.numpy_windows.append(current_numpy_windows)
@@ -96,8 +103,8 @@ class Andersson_dataset(Dataset):
                     self.numpy_one_hot_masks = current_numpy_one_hot_mask
                 else:
                     self.numpy_windows = np.concatenate((self.numpy_windows, current_numpy_windows), axis=0)
-                    self.numpy_one_hot_masks = np.concatenate((self.numpy_one_hot_masks, current_numpy_one_hot_mask), axis=0)
-
+                    self.numpy_one_hot_masks = np.concatenate((self.numpy_one_hot_masks, current_numpy_one_hot_mask), axis=0)                    
+                
             #print(self.numpy_windows.shape)
             #print(self.numpy_one_hot_masks.shape)
 
@@ -107,9 +114,9 @@ class Andersson_dataset(Dataset):
         annotations.sort(key=lambda x: x["id"])
 
         # Min-Max normalizing 
-        xs = np.array([annotation["keypoints"][0::3] for annotation in annotations]).flatten() / 1920
-        ys = np.array([annotation["keypoints"][1::3] for annotation in annotations]).flatten() / 1080
-        
+        xs = np.array([np.array(annotation["keypoints"][0::3])[self.tree_structure] for annotation in annotations]).flatten() / 1920
+        ys = np.array([np.array(annotation["keypoints"][1::3])[self.tree_structure] for annotation in annotations]).flatten() / 1080
+
         # Concatenating xs and ys in the following order: xs[0], ys[0], xs[1], ys[1], ...
         xys = np.ravel([xs,ys],'F')
 
@@ -117,10 +124,16 @@ class Andersson_dataset(Dataset):
         # Using self.keypoints*2 due to the fact that a keypoint has 2 (x,y) coordinates
         numpy_windows = np.array([xys[i:(i+self.window_size*self.keypoints_num*2)] for i in range(0, (len(xys)-self.window_size*self.keypoints_num*2+1), (self.keypoints_num*2))])
         numpy_windows = numpy_windows.reshape([-1, self.window_size, self.keypoints_num*2])
-
+        
+        if self.log_reg:
+            numpy_windows_mean = np.mean(numpy_windows, axis=1)
+            numpy_windows_var = np.var(numpy_windows, axis=1)
+        
+            numpy_windows = np.stack((numpy_windows_mean, numpy_windows_var), axis=2)
+            
         numpy_one_hot_mask = np.zeros((numpy_windows.shape[0], self.track_num), dtype=int)
         numpy_one_hot_mask[:, track_id] = 1
-
+        
         return numpy_windows, numpy_one_hot_mask
 
     
@@ -181,47 +194,8 @@ class Andersson_dataset(Dataset):
 
 
 if __name__=="__main__":
-    print("\n\n")
-    print(train_json_path)
-    print(val_json_path)
-
-    '''
-    ds = Andersson_dataset(mode="train", window_size=40)
-    #print(len(ds))
-
-    print(len(ds.numpy_windows))
+    #ds = Andersson_dataset(mode="test", window_size=40, log_reg=True)
     
-    for windows in ds.numpy_windows:
-        print(len(windows))
-    
-    for masks in ds.numpy_one_hot_masks:
-        print(len(masks))
-
-    print(len(ds))
-
-    print("\n\n")
-    x=ds[0]
-    x=ds[61882]
-
-    print("\n\n")
-    x=ds[61883]
-    x=ds[61883+64018]
-
-    print("\n\n")
-    x=ds[61883+64019]
-    x=ds[61883+64019+62151]
-
-    print("\n\n")
-    x=ds[61883+64019+62152]
-    x=ds[61883+64019+62152+59958]
-
-    print("\n\n")
-    x=ds[61883+64019+62152+59959]
-    '''
-
-
-
-
     
     
     
