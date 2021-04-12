@@ -204,6 +204,7 @@ class SiameseDataset(Dataset):
         self.device = torch.device('cuda:0')
 
         self.window_size = window_size
+        self.skip_window_size = self.window_size // 4
 
         self.tree_structure = [ 10,1,0,1,3,5,7,9,7,5,3,1,
                                 2,4,6,8,6,4,2,1,10,11,13,
@@ -279,9 +280,19 @@ class SiameseDataset(Dataset):
         base_dataset = self._clean_base_dataset(base_dataset)
 
         return base_dataset
-            
 
-    
+
+
+    def _calculate_window_idxs(self, full_size, window_size, step_size):
+        range_list = []
+        for i in range(0, full_size, step_size):
+            if (i+window_size) <= full_size:
+                range_list.append([i, i+window_size])
+        
+        return range_list
+
+
+
     def _create_sliding_windows(self, annotations):
         # Sorting the list of dictionaries by x["id"] (ascending order)
         annotations.sort(key=lambda x: x["id"])
@@ -293,8 +304,9 @@ class SiameseDataset(Dataset):
         # Concatenating xs and ys in the following order: xs[0], ys[0], xs[1], ys[1], ...
         xys = np.ravel([xs,ys],'F')
         
-        # Calculating how many self.window_size sized windows the video contains
-        num_windows = xys.shape[0] // (self.window_size*self.keypoints_num*2)
+        # Calculating how many self.window_size sized windows (with self.skip_window_size shifts) the video contains 
+        #num_windows = xys.shape[0] // (self.window_size*self.keypoints_num*2)
+        windows = self._calculate_window_idxs(full_size=xys.shape[0], window_size=self.window_size*self.keypoints_num*2, step_size=self.skip_window_size*self.keypoints_num*2)
         
         # Creating an array of sliding numpy_windows with shape of [num_frames, self.window_size, self.keypoints_num*2]
         # The window shifting step is self.keypoints_num*2 (1 frame)
@@ -304,9 +316,11 @@ class SiameseDataset(Dataset):
         # Creating an array of sliding numpy_windows with shape of [num_windows, self.window_size, self.keypoints_num*2]
         # The window shifting step is self.window_size*self.keypoints_num*2 (self.window_size frame)
         # Using self.keypoints*2 due to the fact that a keypoint has 2 (x,y) coordinates
-        numpy_windows = np.array([xys[i:(i+self.window_size*self.keypoints_num*2)] for i in range(0, (num_windows*self.window_size*self.keypoints_num*2), (self.window_size*self.keypoints_num*2))])
+        #numpy_windows = np.array([xys[i:(i+self.window_size*self.keypoints_num*2)] for i in range(0, (num_windows*self.window_size*self.keypoints_num*2), (self.window_size*self.keypoints_num*2))])
+        numpy_windows = np.array([xys[idxs[0]:idxs[1]] for idxs in windows])
+        
         numpy_windows = numpy_windows.reshape([-1, self.window_size, self.keypoints_num*2])
-           
+        
         return numpy_windows
 
 
@@ -385,7 +399,7 @@ class SiameseDataset(Dataset):
                     counter += 1        
 
         pair_dataset = np.stack((pos_pairs, neg_pairs), axis=0).reshape(-1, 5)
-        print(f"Created pair dataset containing {pair_dataset.shape[0]//2} positive and {pair_dataset.shape[0]//2} negative pairs by concatenating person pairs.")
+        print(f"Created pair dataset containing {pair_dataset.shape[0]//2} positive and {pair_dataset.shape[0]//2} negative pairs by concatenating person pairs ({num_pairs_per_person} pairs/person, {self.min_windows_num} windows/person).")
 
 
         return pair_dataset
@@ -400,8 +414,19 @@ if __name__=="__main__":
     #ds = Andersson_dataset(mode="test", window_size=40, log_reg=True)
     
     ds = SiameseDataset(mode="train", window_size=40, num_test_person=20)
-    print(len(ds))
+    
 
+    val_ds = SiameseDataset(mode="val", window_size=40, num_test_person=20)
+    
+    print(len(ds))
+    print(ds.base_dataset.shape)
+
+    print(len(val_ds))
+    print(val_ds.base_dataset.shape)
+
+    x1, x2, y = val_ds[50]
+    print(x1.shape, x1.dtype, x2.shape, x2.dtype, y, y.shape)
+    
    
 
 
