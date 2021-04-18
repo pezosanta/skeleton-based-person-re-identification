@@ -198,13 +198,16 @@ class SupervisedDataset(Dataset):
 
 
 class SiameseDataset(Dataset):
-    def __init__(self, mode, window_size, num_test_person, use_tree_structure=True) -> None:
-        self.mode = mode
-        self.num_test_person = num_test_person
+    def __init__(self, dataset, window_size, num_test_person=0, is_train=True, use_tree_structure=True) -> None:
         self.device = torch.device('cuda:0')
 
+        self.is_train = is_train
+
+        self.dataset = dataset
+        self.num_test_person = num_test_person
+
         self.window_size = window_size
-        self.skip_window_size = self.window_size // 4
+        self.skip_window_size = self.window_size // 8
 
         self.tree_structure = [ 10,1,0,1,3,5,7,9,7,5,3,1,
                                 2,4,6,8,6,4,2,1,10,11,13,
@@ -217,34 +220,41 @@ class SiameseDataset(Dataset):
             self.keypoints_num= 20
         
 
-        if self.mode == 'train':
+        if self.dataset == 'train':
             self.json_path = train_json_path
-        elif self.mode == 'val':
+        elif self.dataset == 'val':
             self.json_path = val_json_path
-        elif self.mode == 'test':
+        elif self.dataset == 'test':
             self.json_path = test_json_path
 
         self.base_dataset = self._create_base_dataset()
         self.min_windows_num = self.get_min_windows_num(need_print=False)        
         
-        self.pair_dataset = self._create_pair_dataset()
+        if self.is_train:
+            self.pair_dataset = self._create_pair_dataset()
     
 
 
     def __len__(self):
-        return self.pair_dataset.shape[0]
+        if self.is_train:
+            return self.pair_dataset.shape[0]
+        else:
+            return len(self.base_dataset)
 
 
     
     def __getitem__(self, index):
-        person1_id, person1_window_id, person2_id, person2_window_id, label = self.pair_dataset[index]
-        
-        person1_window = self.base_dataset[person1_id][person1_window_id]
-        person2_window = self.base_dataset[person2_id][person2_window_id]
-        
-        tensor_person1_window, tensor_person2_window, tensor_label = self._transform(person1_window=person1_window, person2_window=person2_window, label=label)
-        
-        return tensor_person1_window, tensor_person2_window, tensor_label
+        if self.is_train:
+            person1_id, person1_window_id, person2_id, person2_window_id, label = self.pair_dataset[index]
+            
+            person1_window = self.base_dataset[person1_id][person1_window_id]
+            person2_window = self.base_dataset[person2_id][person2_window_id]
+            
+            tensor_person1_window, tensor_person2_window, tensor_label = self._transform(person1_window=person1_window, person2_window=person2_window, label=label)
+            
+            return tensor_person1_window, tensor_person2_window, tensor_label
+        else:
+            return None
     
 
 
@@ -331,7 +341,8 @@ class SiameseDataset(Dataset):
         base_dataset = base_dataset[not_none_indices]
 
         # Excluding num_test_person person from the training dataset
-        base_dataset = base_dataset[0:-self.num_test_person]
+        if self.num_test_person != 0:
+            base_dataset = base_dataset[0:-self.num_test_person]
 
         return base_dataset
     
@@ -406,26 +417,23 @@ class SiameseDataset(Dataset):
 
 
 
-
-
 if __name__=="__main__":
     
-
+    
     #ds = Andersson_dataset(mode="test", window_size=40, log_reg=True)
     
-    ds = SiameseDataset(mode="train", window_size=40, num_test_person=20)
-    
-
-    val_ds = SiameseDataset(mode="val", window_size=40, num_test_person=20)
+    ds = SiameseDataset(dataset='train', is_train=False, window_size=40, num_test_person=20)
+    val_ds = SiameseDataset(dataset="val", is_train=False, window_size=40, num_test_person=20)
+    test_ds = SiameseDataset(dataset='test', is_train=False, window_size=40)
     
     print(len(ds))
-    print(ds.base_dataset.shape)
+    print(ds.base_dataset.shape, ds.base_dataset[0].shape, ds.base_dataset[10].shape)
 
     print(len(val_ds))
-    print(val_ds.base_dataset.shape)
+    print(val_ds.base_dataset.shape, val_ds.base_dataset[0].shape, val_ds.base_dataset[10].shape)
 
-    x1, x2, y = val_ds[50]
-    print(x1.shape, x1.dtype, x2.shape, x2.dtype, y, y.shape)
+    print(len(test_ds))
+    print(test_ds.base_dataset.shape, test_ds.base_dataset[0].shape, test_ds.base_dataset[10].shape)
     
    
 
