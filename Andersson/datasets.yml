@@ -1,0 +1,5 @@
+base_path: '../../../datasets/Andersson/kinect_gait_json_dataset/'
+
+training: 'train/'
+validation: 'val/'
+test: 'test/'

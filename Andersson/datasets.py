@@ -1,242 +1,250 @@
 import torch
 from torch.utils.data import Dataset, DataLoader
 
-
 import glob
 import json
+import yaml
 import numpy as np
 from natsort import natsorted
 from tqdm import tqdm
+from enum import Enum
 
 
 
-database_path = "../../../datasets/Andersson/kinect_gait_json_dataset/"
-train_database_path = database_path + "train/"
-val_database_path = database_path + "val/"
-test_database_path = database_path + "test/"
-
-train_json_path = glob.glob(train_database_path + "*.json")
-val_json_path = glob.glob(val_database_path + "*.json")
-test_json_path = glob.glob(test_database_path + "*.json")
-
-train_json_path = natsorted(train_json_path)#[0:54]
-val_json_path = natsorted(val_json_path)#[0:18]
-test_json_path = natsorted(test_json_path)
+class DatasetType(Enum):
+    TRAINING = 'training'
+    VALIDATION = 'validation'
+    TEST = 'test'
 
 
 
-class SupervisedDataset(Dataset):
-    def __init__(self, mode, window_size=3, log_reg=False):
+class TrainingMode(Enum):
+    SUPERVISED = 0
+    SUPERVISED_LOGREG = 1
+    SIAMESE = 2
+
+
+
+class BaseDataset():
+    def __init__(self, dataset_type: DatasetType, num_exclude: int, window_size: int, shift_size: int, mode: TrainingMode = TrainingMode.SUPERVISED, use_tree_structure: bool = True):
+        self.dataset_type = dataset_type
         self.mode = mode
-        self.log_reg = log_reg
-     
+
         self.window_size = window_size
-        self.keypoints_num = 39#20
-        self.track_num = 170
-        self.device = torch.device('cuda:0')
+        self.shift_size = shift_size
+        self.num_exclude = num_exclude
 
         self.tree_structure = [ 10,1,0,1,3,5,7,9,7,5,3,1,
                                 2,4,6,8,6,4,2,1,10,11,13,
                                 15,17,19,17,15,13,11,12,14,
                                 16,18,16,14,12,11,10 ]
+        self.keypoints_num = len(self.tree_structure) if use_tree_structure else 20
+        self.features_num = 2*self.keypoints_num if self.mode != TrainingMode.SUPERVISED_LOGREG else 2
 
-        if self.mode == 'train':
-            self.json_path = train_json_path
-        elif self.mode == 'val':
-            self.json_path = val_json_path
-        elif self.mode == 'test':
-            self.json_path = test_json_path
+        self.json_paths = self._load_database_path()
 
-        self.numpy_windows = None
-        self.numpy_one_hot_masks = None
+        self.num_person_id = 170
+        self.base_dataset, self.base_labels, self.base_windows_num = self._create_base_dataset()
 
-        self._create_dataset()
 
-        self.length = self._get_length()
 
+    def _load_database_path(self):
+        paths = yaml.safe_load(open('datasets.yml').read())
+
+        database_path = paths['base_path'] + paths[self.dataset_type.value]
+        json_paths = natsorted(glob.glob(database_path + "*.json"))
+
+        return json_paths
     
 
-    def _create_dataset(self):
-        print(len(self.json_path))
-      
-        for i, json_file in enumerate(self.json_path):
-            print(i)
 
+    def _create_base_dataset(self):
+        base_dataset = np.array([None]*self.num_person_id)
+        base_labels = np.array([None]*self.num_person_id)
+        base_windows_num = np.zeros(self.num_person_id, dtype=int)
+      
+        for i, json_file in enumerate(tqdm(self.json_paths, desc="Creating windows for each person", unit=" person")):
             with open(json_file) as f:
                 current_dictionary = json.load(f)
             
             current_annotations = current_dictionary["annotations"]
             current_track_id = int(current_annotations[0]["track_id"])
             
-            current_numpy_windows, current_numpy_one_hot_mask = self._create_sliding_window(current_annotations, current_track_id)
+            current_numpy_windows, current_numpy_labels = self._create_sliding_windows(annotations=current_annotations, track_id=current_track_id)
 
-            if self.mode == "train":
-                if i < (len(self.json_path)/4):
-                    if self.numpy_windows is None and self.numpy_one_hot_masks is None:
-                        self.numpy_windows = [current_numpy_windows]
-                        self.numpy_one_hot_masks = [current_numpy_one_hot_mask]
-                    else:
-                        self.numpy_windows[0] = np.concatenate((self.numpy_windows[0], current_numpy_windows), axis=0)
-                        self.numpy_one_hot_masks[0] = np.concatenate((self.numpy_one_hot_masks[0], current_numpy_one_hot_mask), axis=0)
-                elif (len(self.json_path)/4) <= i < (2*len(self.json_path)/4):
-                    if len(self.numpy_windows) == 1 and len(self.numpy_one_hot_masks) == 1:
-                        self.numpy_windows.append(current_numpy_windows)
-                        self.numpy_one_hot_masks.append(current_numpy_one_hot_mask)
-                    else:
-                        self.numpy_windows[1] = np.concatenate((self.numpy_windows[1], current_numpy_windows), axis=0)
-                        self.numpy_one_hot_masks[1] = np.concatenate((self.numpy_one_hot_masks[1], current_numpy_one_hot_mask), axis=0)
-                elif (2*len(self.json_path)/4) <= i < (3*len(self.json_path)/4):
-                    if len(self.numpy_windows) == 2 and len(self.numpy_one_hot_masks) == 2:
-                        self.numpy_windows.append(current_numpy_windows)
-                        self.numpy_one_hot_masks.append(current_numpy_one_hot_mask)
-                    else:
-                        self.numpy_windows[2] = np.concatenate((self.numpy_windows[2], current_numpy_windows), axis=0)
-                        self.numpy_one_hot_masks[2] = np.concatenate((self.numpy_one_hot_masks[2], current_numpy_one_hot_mask), axis=0)
-                else:
-                    if len(self.numpy_windows) == 3 and len(self.numpy_one_hot_masks) == 3:
-                        self.numpy_windows.append(current_numpy_windows)
-                        self.numpy_one_hot_masks.append(current_numpy_one_hot_mask)
-                    else:
-                        self.numpy_windows[3] = np.concatenate((self.numpy_windows[3], current_numpy_windows), axis=0)
-                        self.numpy_one_hot_masks[3] = np.concatenate((self.numpy_one_hot_masks[3], current_numpy_one_hot_mask), axis=0)
-
+            if base_dataset[current_track_id] is None:
+                base_dataset[current_track_id] = current_numpy_windows
+                base_labels[current_track_id] = current_numpy_labels
             else:
-                if self.numpy_windows is None and self.numpy_one_hot_masks is None:
-                    self.numpy_windows = current_numpy_windows
-                    self.numpy_one_hot_masks = current_numpy_one_hot_mask
-                else:
-                    self.numpy_windows = np.concatenate((self.numpy_windows, current_numpy_windows), axis=0)
-                    self.numpy_one_hot_masks = np.concatenate((self.numpy_one_hot_masks, current_numpy_one_hot_mask), axis=0)                    
+                base_dataset[current_track_id] = np.concatenate((base_dataset[current_track_id], current_numpy_windows), axis=0)
+                base_labels[current_track_id] = np.concatenate((base_labels[current_track_id], current_numpy_labels), axis=0)
                 
-            #print(self.numpy_windows.shape)
-            #print(self.numpy_one_hot_masks.shape)
+            base_windows_num[current_track_id] += current_numpy_windows.shape[0]
+        
+        base_dataset, base_labels, base_windows_num = self._clean_base_dataset(base_dataset=base_dataset, base_labels=base_labels, base_windows_num=base_windows_num)
+
+        if self.mode != TrainingMode.SIAMESE:
+            base_dataset, base_labels = self._concatenate_windows(base_dataset=base_dataset, base_labels=base_labels, base_windows_num=base_windows_num)
+
+        return base_dataset, base_labels, base_windows_num
 
     
-    def _create_sliding_window(self, annotations, track_id):
+
+    def _calculate_window_idxs(self, full_size, window_size, step_size):
+        range_list = []
+        for i in range(0, full_size, step_size):
+            if (i+window_size) <= full_size:
+                range_list.append([i, i+window_size])
+        
+        return range_list
+
+
+
+    def _create_sliding_windows(self, annotations, track_id):
         # Sorting the list of dictionaries by x["id"] (ascending order)
         annotations.sort(key=lambda x: x["id"])
-
+        
         # Min-Max normalizing 
         xs = np.array([np.array(annotation["keypoints"][0::3])[self.tree_structure] for annotation in annotations]).flatten() / 1920
         ys = np.array([np.array(annotation["keypoints"][1::3])[self.tree_structure] for annotation in annotations]).flatten() / 1080
-
+        
         # Concatenating xs and ys in the following order: xs[0], ys[0], xs[1], ys[1], ...
         xys = np.ravel([xs,ys],'F')
-
+        
+        # Calculating how many self.window_size sized windows (with self.skip_window_size shifts) the video contains 
+        #num_windows = xys.shape[0] // (self.window_size*self.keypoints_num*2)
+        windows = self._calculate_window_idxs(full_size=xys.shape[0], window_size=self.window_size*self.keypoints_num*2, step_size=self.shift_size*self.keypoints_num*2)
+        
         # Creating an array of sliding numpy_windows with shape of [num_frames, self.window_size, self.keypoints_num*2]
         # The window shifting step is self.keypoints_num*2 (1 frame)
         # Using self.keypoints*2 due to the fact that a keypoint has 2 (x,y) coordinates
-        numpy_windows = np.array([xys[i:(i+self.window_size*self.keypoints_num*2)] for i in range(0, (len(xys)-self.window_size*self.keypoints_num*2+1), (self.keypoints_num*2))])
-        numpy_windows = numpy_windows.reshape([-1, self.window_size, self.keypoints_num*2])
+        #numpy_windows = np.array([xys[i:(i+self.window_size*self.keypoints_num*2)] for i in range(0, (len(xys)-self.window_size*self.keypoints_num*2+1), (self.keypoints_num*2))])
         
-        if self.log_reg:
+        # Creating an array of sliding numpy_windows with shape of [num_windows, self.window_size, self.keypoints_num*2]
+        # The window shifting step is self.window_size*self.keypoints_num*2 (self.window_size frame)
+        # Using self.keypoints*2 due to the fact that a keypoint has 2 (x,y) coordinates
+        #numpy_windows = np.array([xys[i:(i+self.window_size*self.keypoints_num*2)] for i in range(0, (num_windows*self.window_size*self.keypoints_num*2), (self.window_size*self.keypoints_num*2))])
+        numpy_windows = np.array([xys[idxs[0]:idxs[1]] for idxs in windows])
+        numpy_windows = numpy_windows.reshape([-1, self.window_size, self.keypoints_num*2])
+
+        if self.mode == TrainingMode.SUPERVISED_LOGREG:
             numpy_windows_mean = np.mean(numpy_windows, axis=1)
             numpy_windows_var = np.var(numpy_windows, axis=1)
         
             numpy_windows = np.stack((numpy_windows_mean, numpy_windows_var), axis=2)
-            
-        numpy_one_hot_mask = np.zeros((numpy_windows.shape[0], self.track_num), dtype=int)
-        numpy_one_hot_mask[:, track_id] = 1
         
-        return numpy_windows, numpy_one_hot_mask
-
-    
-
-    def _transform(self, current_numpy_window, current_numpy_one_hot_mask):
-                      
-        tensor_current_window = torch.as_tensor(current_numpy_window, dtype=torch.float32).to(device=self.device)
+        numpy_labels = np.zeros((numpy_windows.shape[0]), dtype=int)
+        numpy_labels[:] = track_id
         
-        tensor_one_hot_mask = torch.as_tensor(current_numpy_one_hot_mask, dtype=torch.float32).to(device=self.device)
-        #tensor_one_hot_mask = torch.as_tensor(current_numpy_one_hot_mask, dtype=torch.long).to(device=self.device)               
-
-        return tensor_current_window, tensor_one_hot_mask
+        return numpy_windows, numpy_labels
 
 
     
-    def _get_length(self):
-        if self.mode == "train":
-            length = 0
-            for windows in self.numpy_windows:
-                length += len(windows)
-            return length
-        else:
-            return(len(self.numpy_windows))
+    def _clean_base_dataset(self, base_dataset, base_labels, base_windows_num):
+        # Cleaning up Nonetype members of the base dataset
+        not_none_indices = [windows is not None for windows in base_dataset]
+
+        base_dataset = base_dataset[not_none_indices]
+        base_labels = base_labels[not_none_indices]
+        base_windows_num = base_windows_num[not_none_indices]
+
+        # Making person ids continous from 0 to num_persons
+        for i, labels in enumerate(base_labels):
+            labels[:] = i
+
+        # Excluding num_test_person person from the training dataset
+        if self.num_exclude != 0:
+            base_dataset = base_dataset[0:-self.num_exclude]
+            base_labels = base_labels[0:-self.num_exclude]
+            base_windows_num = base_windows_num[0:-self.num_exclude]
+
+        return base_dataset, base_labels, base_windows_num
 
     
 
-    def __getitem__(self, index):        
-        if self.mode == "train":
-            if index < len(self.numpy_windows[0]):
-                #print(f"array: 0 | index: {index}")
-                current_numpy_window = self.numpy_windows[0][index]
-                current_numpy_one_hot_mask = self.numpy_one_hot_masks[0][index]
-            elif index < (len(self.numpy_windows[0]) + len(self.numpy_windows[1])):
-                #print(f"array: 1 | index: {index-len(self.numpy_windows[0])}")
-                current_numpy_window = self.numpy_windows[1][index-len(self.numpy_windows[0])]
-                current_numpy_one_hot_mask = self.numpy_one_hot_masks[1][index-len(self.numpy_one_hot_masks[0])]
-            elif index < (len(self.numpy_windows[0]) + len(self.numpy_windows[1]) + len(self.numpy_windows[2])):
-                #print(f"array: 2 | index: {index-len(self.numpy_windows[0])-len(self.numpy_windows[1])}")
-                current_numpy_window = self.numpy_windows[2][index-len(self.numpy_windows[0])-len(self.numpy_windows[1])]
-                current_numpy_one_hot_mask = self.numpy_one_hot_masks[2][index-len(self.numpy_one_hot_masks[0])-len(self.numpy_one_hot_masks[1])]
-            else:
-                #print(f"array: 3 | index: {index-len(self.numpy_one_hot_masks[0])-len(self.numpy_one_hot_masks[1])-len(self.numpy_one_hot_masks[2])}")
-                current_numpy_window = self.numpy_windows[3][index-len(self.numpy_windows[0])-len(self.numpy_windows[1])-len(self.numpy_windows[2])]
-                current_numpy_one_hot_mask = self.numpy_one_hot_masks[3][index-len(self.numpy_one_hot_masks[0])-len(self.numpy_one_hot_masks[1])-len(self.numpy_one_hot_masks[2])]
-        else:
-            current_numpy_window = self.numpy_windows[index]
-            current_numpy_one_hot_mask = self.numpy_one_hot_masks[index]
+    def _concatenate_windows(self, base_dataset, base_labels, base_windows_num):
+        seq_length = 2*self.keypoints_num if self.mode == TrainingMode.SUPERVISED_LOGREG else self.window_size
 
-        tensor_current_window, tensor_one_hot_mask = self._transform(current_numpy_window, current_numpy_one_hot_mask)
+        concat_dataset = np.zeros((int(base_windows_num.sum()), seq_length, self.features_num))
+        concat_labels = np.zeros(base_windows_num.sum(), dtype=int)
+
+        curr_idx = 0
+        for i in tqdm(range(base_dataset.shape[0]), desc="Concatenating windows, labels, #windows of each person", unit=" person"):
+            concat_dataset[curr_idx:curr_idx+base_dataset[i].shape[0], :, :] = base_dataset[i]
+            concat_labels[curr_idx:curr_idx+base_labels[i].shape[0]] = base_labels[i]
+
+            curr_idx += base_dataset[i].shape[0]
+
+        return concat_dataset, concat_labels
+
+
+
+    def get(self):
+        return self.base_dataset, self.base_labels, self.base_windows_num
+
+
+
+
+
+
+class SupervisedDataset(Dataset):
+    def __init__(self, dataset_type: DatasetType, num_exclude: int, window_size: int, shift_size: int, mode: TrainingMode = TrainingMode.SUPERVISED, use_tree_structure: bool = True):
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
-        return tensor_current_window, tensor_one_hot_mask
+        self.dataset, self.labels, self.windows_num = BaseDataset(dataset_type=dataset_type, num_exclude=num_exclude, window_size=window_size, shift_size=shift_size, mode=mode, use_tree_structure=use_tree_structure).get()
 
     
+    
+    def __getitem__(self, index):
+        current_numpy_window = self.dataset[index]
+        current_numpy_label = self.labels[index]
+
+        current_tensor_window, current_tensor_label = self._transform(current_numpy_window=current_numpy_window, current_numpy_label=current_numpy_label)
+
+        return current_tensor_window, current_tensor_label
+
+
 
     def __len__(self):
-        return self.length
+        return self.dataset.shape[0]
+
+
+
+    def _transform(self, current_numpy_window, current_numpy_label):
+        current_tensor_window = torch.as_tensor(current_numpy_window, dtype=torch.float32).to(device=self.device)
+        current_tensor_label = torch.as_tensor(current_numpy_label, dtype=torch.long).to(device=self.device)              
+
+        return current_tensor_window, current_tensor_label
+
+    
+
+    def get_class_weights(self):
+        tensor_weights = torch.reciprocal(torch.tensor(self.windows_num, dtype=torch.float32))
+
+        return tensor_weights
+
+
+
 
 
 
 class SiameseDataset(Dataset):
-    def __init__(self, dataset, window_size, num_test_person=0, is_train=True, use_tree_structure=True) -> None:
-        self.device = torch.device('cuda:0')
-
-        self.is_train = is_train
-
-        self.dataset = dataset
-        self.num_test_person = num_test_person
-
-        self.window_size = window_size
-        self.skip_window_size = self.window_size // 8
-
-        self.tree_structure = [ 10,1,0,1,3,5,7,9,7,5,3,1,
-                                2,4,6,8,6,4,2,1,10,11,13,
-                                15,17,19,17,15,13,11,12,14,
-                                16,18,16,14,12,11,10 ]
-
-        if use_tree_structure:
-            self.keypoints_num = len(self.tree_structure)       # 39
-        else:
-            self.keypoints_num= 20
+    def __init__(self, dataset_type: DatasetType, num_exclude: int, window_size: int, shift_size: int, mode: TrainingMode = TrainingMode.SIAMESE, need_pair_dataset: bool = True, use_tree_structure: bool = True):
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
+        self.base_dataset, _, _ = BaseDataset(dataset_type=dataset_type, num_exclude=num_exclude, window_size=window_size, shift_size=shift_size, mode=mode, use_tree_structure=use_tree_structure).get()
 
-        if self.dataset == 'train':
-            self.json_path = train_json_path
-        elif self.dataset == 'val':
-            self.json_path = val_json_path
-        elif self.dataset == 'test':
-            self.json_path = test_json_path
-
-        self.base_dataset = self._create_base_dataset()
         self.min_windows_num = self.get_min_windows_num(need_print=False)        
         
-        if self.is_train:
+        self.need_pair_dataset = need_pair_dataset
+
+        if self.need_pair_dataset:
             self.pair_dataset = self._create_pair_dataset()
     
 
 
     def __len__(self):
-        if self.is_train:
+        if self.need_pair_dataset:
             return self.pair_dataset.shape[0]
         else:
             return len(self.base_dataset)
@@ -244,7 +252,7 @@ class SiameseDataset(Dataset):
 
     
     def __getitem__(self, index):
-        if self.is_train:
+        if self.need_pair_dataset:
             person1_id, person1_window_id, person2_id, person2_window_id, label = self.pair_dataset[index]
             
             person1_window = self.base_dataset[person1_id][person1_window_id]
@@ -263,89 +271,10 @@ class SiameseDataset(Dataset):
         tensor_person1_window = torch.as_tensor(person1_window, dtype=torch.float32).to(device=self.device)
         tensor_person2_window = torch.as_tensor(person2_window, dtype=torch.float32).to(device=self.device)
 
-        tensor_label = torch.as_tensor(label, dtype=torch.float32).to(device=self.device)
-        #tensor_one_hot_mask = torch.as_tensor(current_numpy_one_hot_mask, dtype=torch.long).to(device=self.device)               
+        tensor_label = torch.as_tensor(label, dtype=torch.float32).to(device=self.device)      
 
         return tensor_person1_window, tensor_person2_window, tensor_label
 
-
-
-    def _create_base_dataset(self):
-        base_dataset = np.array([None]*170)
-      
-        for i, json_file in enumerate(tqdm(self.json_path, desc="Creating windows for each person", unit=" person")):
-            with open(json_file) as f:
-                current_dictionary = json.load(f)
-            
-            current_annotations = current_dictionary["annotations"]
-            current_track_id = int(current_annotations[0]["track_id"])
-            
-            current_numpy_windows = self._create_sliding_windows(current_annotations)
-
-            if base_dataset[current_track_id] is None:
-                base_dataset[current_track_id] = current_numpy_windows
-            else:
-                base_dataset[current_track_id] = np.concatenate((base_dataset[current_track_id], current_numpy_windows), axis=0)
-        
-        base_dataset = self._clean_base_dataset(base_dataset)
-
-        return base_dataset
-
-
-
-    def _calculate_window_idxs(self, full_size, window_size, step_size):
-        range_list = []
-        for i in range(0, full_size, step_size):
-            if (i+window_size) <= full_size:
-                range_list.append([i, i+window_size])
-        
-        return range_list
-
-
-
-    def _create_sliding_windows(self, annotations):
-        # Sorting the list of dictionaries by x["id"] (ascending order)
-        annotations.sort(key=lambda x: x["id"])
-        
-        # Min-Max normalizing 
-        xs = np.array([np.array(annotation["keypoints"][0::3])[self.tree_structure] for annotation in annotations]).flatten() / 1920
-        ys = np.array([np.array(annotation["keypoints"][1::3])[self.tree_structure] for annotation in annotations]).flatten() / 1080
-        
-        # Concatenating xs and ys in the following order: xs[0], ys[0], xs[1], ys[1], ...
-        xys = np.ravel([xs,ys],'F')
-        
-        # Calculating how many self.window_size sized windows (with self.skip_window_size shifts) the video contains 
-        #num_windows = xys.shape[0] // (self.window_size*self.keypoints_num*2)
-        windows = self._calculate_window_idxs(full_size=xys.shape[0], window_size=self.window_size*self.keypoints_num*2, step_size=self.skip_window_size*self.keypoints_num*2)
-        
-        # Creating an array of sliding numpy_windows with shape of [num_frames, self.window_size, self.keypoints_num*2]
-        # The window shifting step is self.keypoints_num*2 (1 frame)
-        # Using self.keypoints*2 due to the fact that a keypoint has 2 (x,y) coordinates
-        #numpy_windows = np.array([xys[i:(i+self.window_size*self.keypoints_num*2)] for i in range(0, (len(xys)-self.window_size*self.keypoints_num*2+1), (self.keypoints_num*2))])
-        
-        # Creating an array of sliding numpy_windows with shape of [num_windows, self.window_size, self.keypoints_num*2]
-        # The window shifting step is self.window_size*self.keypoints_num*2 (self.window_size frame)
-        # Using self.keypoints*2 due to the fact that a keypoint has 2 (x,y) coordinates
-        #numpy_windows = np.array([xys[i:(i+self.window_size*self.keypoints_num*2)] for i in range(0, (num_windows*self.window_size*self.keypoints_num*2), (self.window_size*self.keypoints_num*2))])
-        numpy_windows = np.array([xys[idxs[0]:idxs[1]] for idxs in windows])
-        
-        numpy_windows = numpy_windows.reshape([-1, self.window_size, self.keypoints_num*2])
-        
-        return numpy_windows
-
-
-
-    def _clean_base_dataset(self, base_dataset):
-        # Cleaning up Nonetype members of the base dataset
-        not_none_indices = [windows is not None for windows in base_dataset]
-        base_dataset = base_dataset[not_none_indices]
-
-        # Excluding num_test_person person from the training dataset
-        if self.num_test_person != 0:
-            base_dataset = base_dataset[0:-self.num_test_person]
-
-        return base_dataset
-    
 
 
     def get_min_windows_num(self, need_print=True):
@@ -420,11 +349,34 @@ class SiameseDataset(Dataset):
 if __name__=="__main__":
     
     
-    #ds = Andersson_dataset(mode="test", window_size=40, log_reg=True)
-    
-    ds = SiameseDataset(dataset='train', is_train=False, window_size=40, num_test_person=20)
-    val_ds = SiameseDataset(dataset="val", is_train=False, window_size=40, num_test_person=20)
-    test_ds = SiameseDataset(dataset='test', is_train=False, window_size=40)
+    #ds = SupervisedDataset(dataset_type=DatasetType.TRAINING, num_exclude=0, window_size=40, shift_size=1, mode=TrainingMode.SUPERVISED_LOGREG)
+    ds = SiameseDataset(dataset_type=DatasetType.VALIDATION, num_exclude=0, window_size=40, shift_size=10, mode=TrainingMode.SIAMESE, need_pair_dataset=False)
+
+    loader = DataLoader(dataset=ds, batch_size=10, shuffle=True)
+
+    it = iter(loader)
+    window1, window2, label = next(it)
+
+    print(window1.shape, window2.shape, label)
+
+    #print(ds.windows_num.shape)
+    #print(ds.windows_num[60:100])
+    #print(ds.get_class_weights()[60:100])
+    #print(ds.get_class_weights()[60])
+
+
+    '''
+    for i, labels in enumerate(ds.base_labels):
+        labels[:] = i
+
+    for i in range(len(ds.base_dataset)):
+        print(ds.base_labels[i][0])
+    '''
+
+    '''
+    ds = SiameseDataset(dataset='train', need_pair_dataset=False, window_size=40, num_test_person=20)
+    val_ds = SiameseDataset(dataset="val", need_pair_dataset=False, window_size=40, num_test_person=20)
+    test_ds = SiameseDataset(dataset='test', need_pair_dataset=False, window_size=40)
     
     print(len(ds))
     print(ds.base_dataset.shape, ds.base_dataset[0].shape, ds.base_dataset[10].shape)
@@ -434,7 +386,7 @@ if __name__=="__main__":
 
     print(len(test_ds))
     print(test_ds.base_dataset.shape, test_ds.base_dataset[0].shape, test_ds.base_dataset[10].shape)
-    
+    '''
    
 
 
