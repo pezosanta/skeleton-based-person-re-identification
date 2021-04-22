@@ -1,0 +1,10 @@
+# File extensions
+*.pyc
+*.png
+*.txt
+
+# Data, files
+lightning_logs/
+model_params/
+Tensorboard/
+test_logs/
