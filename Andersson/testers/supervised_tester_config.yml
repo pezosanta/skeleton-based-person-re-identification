@@ -1,0 +1,18 @@
+# Dataset config
+dataset_window_size: 40
+dataset_shift_size: 1
+dataset_num_exclude: 0
+dataset_use_tree_structure: True 
+dataset_use_scaled: True
+
+
+# BNLSTM model config
+bnlstm_hidden_size: 256
+bnlstm_n_layers: 2
+bnlstm_dropout: 0.5
+
+
+# Test configs
+batch_size: 128
+
+

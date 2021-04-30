@@ -1,4 +1,5 @@
-base_path: '../../../datasets/Andersson/kinect_gait_json_dataset/'
+orig_path: '../../../datasets/Andersson/kinect_gait_json_dataset/'
+scaled_path: '../../../datasets/Andersson/kinect_gait_json_dataset_scaled/'
 
 training: 'train/'
 validation: 'val/'

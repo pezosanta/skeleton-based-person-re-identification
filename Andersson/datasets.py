@@ -26,7 +26,7 @@ class TrainingMode(Enum):
 
 
 class BaseDataset():
-    def __init__(self, dataset_type: DatasetType, num_exclude: int, window_size: int, shift_size: int, mode: TrainingMode = TrainingMode.SUPERVISED, use_tree_structure: bool = True):
+    def __init__(self, dataset_type: DatasetType, num_exclude: int, window_size: int, shift_size: int, mode: TrainingMode = TrainingMode.SUPERVISED, use_tree_structure: bool = True, use_scaled_dataset: bool = True):
         self.dataset_type = dataset_type
         self.mode = mode
 
@@ -41,17 +41,19 @@ class BaseDataset():
         self.keypoints_num = len(self.tree_structure) if use_tree_structure else 20
         self.features_num = 2*self.keypoints_num if self.mode != TrainingMode.SUPERVISED_LOGREG else 2
 
-        self.json_paths = self._load_database_path()
+        self.json_paths = self._load_database_path(use_scaled_dataset=use_scaled_dataset)
 
         self.num_person_id = 170
         self.base_dataset, self.base_labels, self.base_windows_num = self._create_base_dataset()
 
 
 
-    def _load_database_path(self):
-        paths = yaml.safe_load(open('datasets.yml').read())
+    def _load_database_path(self, use_scaled_dataset):
+        configs = yaml.safe_load(open('datasets.yml').read())
 
-        database_path = paths['base_path'] + paths[self.dataset_type.value]
+        dataset_path = configs['scaled_path'] if use_scaled_dataset else configs['orig_path']
+
+        database_path = dataset_path + configs[self.dataset_type.value]
         json_paths = natsorted(glob.glob(database_path + "*.json"))
 
         return json_paths
@@ -188,10 +190,11 @@ class BaseDataset():
 
 
 class SupervisedDataset(Dataset):
-    def __init__(self, dataset_type: DatasetType, num_exclude: int, window_size: int, shift_size: int, mode: TrainingMode = TrainingMode.SUPERVISED, use_tree_structure: bool = True):
+    def __init__(self, dataset_type: DatasetType, num_exclude: int, window_size: int, shift_size: int, mode: TrainingMode = TrainingMode.SUPERVISED, use_tree_structure: bool = True, use_scaled_dataset: bool = True):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.dataset_type = dataset_type
         
-        self.dataset, self.labels, self.windows_num = BaseDataset(dataset_type=dataset_type, num_exclude=num_exclude, window_size=window_size, shift_size=shift_size, mode=mode, use_tree_structure=use_tree_structure).get()
+        self.dataset, self.labels, self.windows_num = BaseDataset(dataset_type=dataset_type, num_exclude=num_exclude, window_size=window_size, shift_size=shift_size, mode=mode, use_tree_structure=use_tree_structure, use_scaled_dataset=use_scaled_dataset).get()
 
     
     
@@ -211,14 +214,19 @@ class SupervisedDataset(Dataset):
 
 
     def _transform(self, current_numpy_window, current_numpy_label):
-        current_tensor_window = torch.as_tensor(current_numpy_window, dtype=torch.float32).to(device=self.device)
-        current_tensor_label = torch.as_tensor(current_numpy_label, dtype=torch.long).to(device=self.device)              
+        if (self.dataset_type == DatasetType.TRAINING) and (np.random.uniform() > 0.5):
+            current_numpy_window = np.flip(current_numpy_window, axis=0)
+
+        current_tensor_window = torch.as_tensor(current_numpy_window.copy(), dtype=torch.float32)#.to(device=self.device)
+        current_tensor_label = torch.as_tensor(current_numpy_label, dtype=torch.long)#.to(device=self.device)              
 
         return current_tensor_window, current_tensor_label
 
     
 
     def get_class_weights(self):
+        # Reference: https://discuss.pytorch.org/t/passing-the-weights-to-crossentropyloss-correctly/14731
+        
         tensor_weights = torch.reciprocal(torch.tensor(self.windows_num, dtype=torch.float32))
 
         return tensor_weights
@@ -227,9 +235,16 @@ class SupervisedDataset(Dataset):
 
 
 
+class NegativePairLabel(Enum):
+    CROSSENTROPY = 0
+    COSINE_SIMILARITY = -1
+    MARGIN = -1
+    CONTRASTIVE = -1
+
+
 
 class SiameseDataset(Dataset):
-    def __init__(self, dataset_type: DatasetType, num_exclude: int, window_size: int, shift_size: int, mode: TrainingMode = TrainingMode.SIAMESE, need_pair_dataset: bool = True, use_tree_structure: bool = True):
+    def __init__(self, dataset_type: DatasetType, num_exclude: int, window_size: int, shift_size: int, mode: TrainingMode = TrainingMode.SIAMESE, need_pair_dataset: bool = True, negative_pair_label=NegativePairLabel.CROSSENTROPY, use_tree_structure: bool = True):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
         self.base_dataset, _, _ = BaseDataset(dataset_type=dataset_type, num_exclude=num_exclude, window_size=window_size, shift_size=shift_size, mode=mode, use_tree_structure=use_tree_structure).get()
@@ -237,6 +252,7 @@ class SiameseDataset(Dataset):
         self.min_windows_num = self.get_min_windows_num(need_print=False)        
         
         self.need_pair_dataset = need_pair_dataset
+        self.negative_pair_label = negative_pair_label.value
 
         if self.need_pair_dataset:
             self.pair_dataset = self._create_pair_dataset()
@@ -334,7 +350,7 @@ class SiameseDataset(Dataset):
                 
                     
                     other_person_idx = (curr_person_idx + np.random.choice(np.arange(1, len(self.base_dataset)//2), 1)) % len(self.base_dataset)
-                    neg_pairs[curr_person_idx, counter, :] = [curr_person_idx, curr_window_idx, other_person_idx, other_window_idx, 0]
+                    neg_pairs[curr_person_idx, counter, :] = [curr_person_idx, curr_window_idx, other_person_idx, other_window_idx, self.negative_pair_label]
 
                     counter += 1        
 
@@ -349,8 +365,13 @@ class SiameseDataset(Dataset):
 if __name__=="__main__":
     
     
-    #ds = SupervisedDataset(dataset_type=DatasetType.TRAINING, num_exclude=0, window_size=40, shift_size=1, mode=TrainingMode.SUPERVISED_LOGREG)
-    ds = SiameseDataset(dataset_type=DatasetType.VALIDATION, num_exclude=0, window_size=40, shift_size=10, mode=TrainingMode.SIAMESE, need_pair_dataset=False)
+    ds = SupervisedDataset(dataset_type=DatasetType.VALIDATION, num_exclude=0, window_size=40, shift_size=1, mode=TrainingMode.SUPERVISED_LOGREG)
+    
+    print(ds.dataset.shape, ds.windows_num.shape[0])
+
+    print(ds[0][0].shape, ds[1[0].shape])
+    '''
+    ds = SiameseDataset(dataset_type=DatasetType.VALIDATION, num_exclude=0, window_size=40, shift_size=10, mode=TrainingMode.SIAMESE, need_pair_dataset=True, negative_pair_label=NegativePairLabel.COSINE_SIMILARITY)
 
     loader = DataLoader(dataset=ds, batch_size=10, shuffle=True)
 
@@ -363,7 +384,7 @@ if __name__=="__main__":
     #print(ds.windows_num[60:100])
     #print(ds.get_class_weights()[60:100])
     #print(ds.get_class_weights()[60])
-
+    '''
 
     '''
     for i, labels in enumerate(ds.base_labels):

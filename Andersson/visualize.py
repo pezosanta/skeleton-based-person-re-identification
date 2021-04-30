@@ -290,7 +290,7 @@ def create_json_dataset(raw_path, train_path, val_path, test_path, less_than_5_v
             with open(save_path, 'w') as fp:
                 json.dump(coco_dictionary, fp, indent=4)
                 
-seaborn => distplot, jointplot
+#seaborn => distplot, jointplot
 
 if __name__ == "__main__":
     

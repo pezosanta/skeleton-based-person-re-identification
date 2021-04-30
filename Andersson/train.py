@@ -5,16 +5,16 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 import time
 import warnings
-from dataset import Andersson_dataset
+from datasets import SupervisedDataset
 from models import LSTM, LogisticRegression
 
 
 def train(batch_size=64, window_size=3, epochs=100):
 
-    train_dataset = Andersson_dataset(mode='train', window_size=window_size, log_reg=True)
+    train_dataset = SupervisedDataset(mode='train', window_size=window_size, log_reg=True)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
-    val_dataset = Andersson_dataset(mode='val', window_size=window_size, log_reg=True)
+    val_dataset = SupervisedDataset(mode='val', window_size=window_size, log_reg=True)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True)
 
     base_lr_rate = 1e-3

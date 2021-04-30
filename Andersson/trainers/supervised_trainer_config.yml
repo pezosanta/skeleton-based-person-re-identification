@@ -1,0 +1,31 @@
+# Dataset config
+dataset_window_size: 40
+dataset_shift_size: 1
+dataset_num_exclude: 0
+dataset_use_tree_structure: True 
+dataset_use_scaled: True
+
+
+# BNLSTM model config
+bnlstm_hidden_size: 256
+bnlstm_n_layers: 2
+bnlstm_dropout: 0.5
+
+
+# Optimizer and Scheduler configs
+optimizer_base_lr: 0.001
+optimizer_weight_decay: 0.000001
+scheduler_milestones: [20,40,60,80]
+scheduler_gamma: 0.33
+
+
+# Loss configs
+loss_use_weight: True
+
+
+# Training configs
+train_num_epochs: 101
+train_batch_size: 128
+train_cm_epoch_interval: 10
+
+

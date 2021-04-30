@@ -6,5 +6,6 @@
 # Data, files
 lightning_logs/
 model_params/
-Tensorboard/
+model_checkpoints/
+tensorboard_logs/
 test_logs/

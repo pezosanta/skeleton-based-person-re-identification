@@ -185,9 +185,10 @@ class SiameseTest:
         self.test_window_dataset = SiameseDataset(dataset='test', is_train=False, window_size=self.window_size).base_dataset
 
         # Initializing the trained model
-        self.model_checkpoint = 'model_params/siamese_network/version_5_bs_256_baselr_1e-3_multisteplr_milestones_5-15-25_gamma_0.33_lstoutsize_170/version-5-siamese-epoch=28-val_acc_epoch=0.9355.ckpt'
+        #self.model_checkpoint = 'model_params/siamese_network/version_5_bs_256_baselr_1e-3_multisteplr_milestones_5-15-25_gamma_0.33_lstmoutsize_170-latentsize_170-outfcsize_32/version-5-siamese-epoch=28-val_acc_epoch=0.9355.ckpt'
+        self.model_checkpoint = 'model_params/siamese_network/version_6_bs_512_baselr_3e-3_multisteplr_milestones_5-10-15-25_gamma_0.33_lstmoutsize_160-latentsize_32-outfcsize_16-abs+cos+sed/version-6-siamese-epoch=33-val_acc_epoch=0.9358.ckpt'
         self.model = SiameseNetwork().load_from_checkpoint(checkpoint_path=self.model_checkpoint).to(device=self.device).eval()
-
+        
         # Creating core database
         self.averaging_types = ['mean', 'median']
         self.averaging_type = self.averaging_types[0]
@@ -196,13 +197,13 @@ class SiameseTest:
         self.metric_method = 'micro'
         self.similarity_thres = 0.95
 
-        self.file_log_path = f'test_metrics_file_logs/{self.now}-simthres_{self.similarity_thres}-avgtype_{self.averaging_type}/'
+        self.file_log_path = f'test_logs/{self.now}--{self.model_checkpoint.rsplit("/")[-2]}--{self.model_checkpoint.rsplit("/")[-1]}/{self.now}-simthres_{self.similarity_thres}-avgtype_{self.averaging_type}/'
         self.metrics_file_path = self.file_log_path + 'metrics.txt'
 
          
 
     def _create_database(self):
-        database = torch.zeros(len(self.train_window_dataset), self.model.latent_size)
+        database = torch.zeros(len(self.train_window_dataset), self.model.latent_size-2)
 
         with torch.no_grad():            
             for i, person_windows in enumerate(tqdm(self.train_window_dataset, desc="Creating core database (using the training dataset)", unit=" person")):
@@ -221,7 +222,7 @@ class SiameseTest:
 
 
     def start(self):
-        for similarity_thres in [0.9, 0.95, 0.98]:#[0.5, 0.8, 0.85, 0.9, 0.95, 0.98]:
+        for similarity_thres in [0.5, 0.8, 0.85, 0.9, 0.95, 0.98]:
             for averaging_type in self.averaging_types:
                 print(f'\n\nTesting with [similarity threshold = {similarity_thres}] | [averaging type = {averaging_type}] ...')
 
@@ -229,7 +230,7 @@ class SiameseTest:
                 self.averaging_type = averaging_type
 
                 self.database = self._create_database()
-                self.file_log_path = f'test_metrics_file_logs/{self.now}-simthres_{self.similarity_thres}-avgtype_{self.averaging_type}/'
+                self.file_log_path = f'test_logs/{self.now}--{self.model_checkpoint.rsplit("/")[-2]}--{self.model_checkpoint.rsplit("/")[-1]}/{self.now}-simthres_{self.similarity_thres}-avgtype_{self.averaging_type}/'
                 self.metrics_file_path = self.file_log_path + 'metrics.txt'
 
 
@@ -240,7 +241,7 @@ class SiameseTest:
     
 
     def _calculate_similarity(self, window_dataset, dataset_type):
-        database = torch.zeros(len(window_dataset), self.model.latent_size)
+        database = torch.zeros(len(window_dataset), self.model.latent_size-2)
 
         sum_accuracy = 0.0
         sum_precision = 0.0
@@ -330,7 +331,7 @@ class SiameseTest:
 
         # Saving the figures
         if not os.path.exists(self.file_log_path):
-            os.mkdir(self.file_log_path)
+            os.makedirs(self.file_log_path)
         plt.savefig(f'{self.file_log_path}/{dataset_type}_confusion_matrix.png')
 
         plt.close('all')
@@ -338,6 +339,8 @@ class SiameseTest:
 
     
     def _log_to_file(self, metrics, dataset_type):
+        if not os.path.exists(self.file_log_path):
+            os.makedirs(self.file_log_path)
         # Logging metrics into file
         with open(self.metrics_file_path, 'a') as f:
             f.write(f'{dataset_type.capitalize()} phase\n' \
