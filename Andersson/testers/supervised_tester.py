@@ -1,6 +1,5 @@
 import os
 import random
-from torch._C import device
 import yaml
 import numpy as np
 import matplotlib.pyplot as plt
@@ -8,9 +7,7 @@ from tqdm import tqdm
 from datetime import datetime
 
 import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import DataLoader, dataset
+from torch.utils.data import DataLoader
 
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 
@@ -94,7 +91,7 @@ class SupervisedTester():
         if mode == "batch":
             outputs = self._start_testing_loop()
             metrics = self._calculate_epoch_metrics(outputs=outputs)
-            self.log_metrics(metrics=metrics)
+            self._log_metrics(metrics=metrics)
 
 
     
@@ -147,7 +144,7 @@ class SupervisedTester():
 
     
 
-    def log_metrics(self, metrics):
+    def _log_metrics(self, metrics):
         dir_path = f"test_logs/supervised/{self.model_checkpoint_path.rsplit('/', 2)[1]}/"
         png_path = dir_path + "png/"
         eps_path = dir_path + "eps/"

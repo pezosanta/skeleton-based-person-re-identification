@@ -1,4 +1,3 @@
-from models.lstm import LSTM
 import yaml
 import random
 import numpy as np
@@ -180,15 +179,6 @@ class SupervisedModel(LightningModule):
 
 
     def training_epoch_end(self, outputs) -> None:
-        '''
-        avg_loss = torch.stack([out['loss'] for out in outputs]).mean()
-        avg_acc = torch.stack([torch.tensor(out['acc']) for out in outputs]).mean()
-        avg_prec = torch.stack([torch.tensor(out['prec']) for out in outputs]).mean()
-        avg_recall = torch.stack([torch.tensor(out['recall']) for out in outputs]).mean()
-        avg_f1_score = torch.stack([torch.tensor(out['f1_score']) for out in outputs]).mean()
-        total_cm = torch.stack([torch.tensor(out['cm']) for out in outputs]).sum(dim=0).numpy()
-        '''
-
         epoch_loss = torch.stack([out['loss'] for out in outputs]).mean()
         all_y_hat = torch.stack([out['y_hat'] for out in outputs]).view(-1)
         all_y = torch.stack([out['y'] for out in outputs]).view(-1)
@@ -228,12 +218,6 @@ class SupervisedModel(LightningModule):
         y_hat = torch.argmax(y_hat, dim=1)
 
         acc = accuracy_score(y.cpu().view(-1), y_hat.cpu().view(-1))
-        '''
-        prec = precision_score(y.cpu().view(-1), y_hat.cpu(), labels=list(range(self.train_dataset.windows_num.shape[0])), zero_division=0, average='macro')
-        recall = recall_score(y.cpu().view(-1), y_hat.cpu(), labels=list(range(self.train_dataset.windows_num.shape[0])), zero_division=0, average='macro')
-        f1 = f1_score(y.cpu().view(-1), y_hat.cpu(), labels=list(range(self.train_dataset.windows_num.shape[0])), zero_division=0, average='macro')
-        cm = confusion_matrix(y.cpu().view(-1), y_hat.cpu(), labels=list(range(self.train_dataset.windows_num.shape[0])))
-        '''
 
         # Logging validation accuracy fot checkpoint callback
         self.log('val_acc', acc, on_step=True, on_epoch=True, prog_bar=True, logger=False)
@@ -244,15 +228,6 @@ class SupervisedModel(LightningModule):
 
 
     def validation_epoch_end(self, outputs) -> None:
-        '''
-        avg_loss = torch.stack([out['loss'] for out in outputs]).mean()
-        avg_acc = torch.stack([torch.tensor(out['acc']) for out in outputs]).mean()
-        avg_prec = torch.stack([torch.tensor(out['prec']) for out in outputs]).mean()
-        avg_recall = torch.stack([torch.tensor(out['recall']) for out in outputs]).mean()
-        avg_f1_score = torch.stack([torch.tensor(out['f1_score']) for out in outputs]).mean()
-        total_cm = torch.stack([torch.tensor(out['cm']) for out in outputs]).sum(dim=0).numpy()
-        '''
-
         epoch_loss = torch.stack([out['loss'] for out in outputs]).mean()
         all_y_hat = torch.stack([out['y_hat'] for out in outputs]).view(-1)
         all_y = torch.stack([out['y'] for out in outputs]).view(-1)

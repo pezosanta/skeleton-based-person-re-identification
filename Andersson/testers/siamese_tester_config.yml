@@ -1,0 +1,32 @@
+# Dataset config
+dataset_window_size: 40
+dataset_shift_size: 10
+dataset_num_exclude: 100
+dataset_use_tree_structure: True
+dataset_use_scaled: True
+
+
+# BNLSTM model config
+bnlstm_hidden_size: 256
+bnlstm_n_layers: 2
+bnlstm_dropout: 0.5
+
+
+# Siamese model config
+siamese_latent_size: 32
+siamese_out_fc_size: 16
+siamese_latent_dropout: 0
+
+
+# Similarity thresholds
+similarity_thres: [0.5, 0.8, 0.85, 0.9, 0.95, 0.98]
+
+
+# Checkpoint paths
+checkpoint_paths: [
+  "model_checkpoints/siamese/2021.05.01-22:57:00-epochs_10-bs_128-dsWS_40-dsSS_10-dsNE_20-dsUS_True-dsUTS_True-model_SiameseCrossentropy-modelLS_32-modelOFS_16-bnlstmHS_256-bnlstmNL2-bnlstmDOUT_0.5-loss_BCELoss-opt_Adam/epoch=03-val_acc_epoch=0.0000.ckpt",
+  "model_checkpoints/siamese/2021.05.02-11:34:01-epochs_10-bs_128-dsWS_40-dsSS_10-dsNE_100-dsUS_True-dsUTS_True-model_SiameseCrossentropy-modelLS_32-modelOFS_16-modelLDOUT_0-bnlstmHS_256-bnlstmNL2-bnlstmDOUT_0.5-loss_BCELoss-opt_Adam/epoch=08-val_acc_epoch=0.0000.ckpt",
+  "model_checkpoints/siamese/2021.05.02-23:33:01-epochs_10-bs_128-dsWS_40-dsSS_10-dsNE_100-dsUS_True-dsUTS_True-model_SiameseCrossentropy-modelLS_32-modelOFS_16-modelLDOUT_0.5-bnlstmHS_256-bnlstmNL2-bnlstmDOUT_0.5-loss_BCELoss-opt_Adam/epoch=05-val_acc_epoch=0.0000.ckpt",
+  "model_checkpoints/siamese/2021.05.03-09:04:34-epochs_10-bs_128-dsWS_40-dsSS_10-dsNE_100-dsUS_True-dsUTS_True-model_SiameseCrossentropy-modelLS_32-modelOFS_16-modelLDOUT_0.5-bnlstmHS_256-bnlstmNL2-bnlstmDOUT_0.5-loss_BCELoss-auxLoss_Cos-auxLossM_0.2-auxLossW_0.4/epoch=03-val_acc_epoch=0.0000.ckpt"
+]
+

@@ -1,8 +1,8 @@
 # Dataset config
 dataset_window_size: 40
 dataset_shift_size: 1
-dataset_num_exclude: 0
-dataset_use_tree_structure: True 
+dataset_num_exclude: 100
+dataset_use_tree_structure: True
 dataset_use_scaled: True
 
 
@@ -24,7 +24,7 @@ loss_use_weight: True
 
 
 # Training configs
-train_num_epochs: 101
+train_num_epochs: 51
 train_batch_size: 128
 train_cm_epoch_interval: 10
 

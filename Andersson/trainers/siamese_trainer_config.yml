@@ -1,0 +1,38 @@
+# Dataset config
+dataset_window_size: 40
+dataset_shift_size: 10
+dataset_num_exclude: 100
+dataset_use_tree_structure: True
+dataset_use_scaled: True
+
+
+# BNLSTM model config
+bnlstm_hidden_size: 256
+bnlstm_n_layers: 2
+bnlstm_dropout: 0.5
+
+
+# Siamese model config
+siamese_latent_size: 32
+siamese_out_fc_size: 16
+siamese_latent_dropout: 0.5
+
+
+# Auxiliary loss function config
+aux_criterion_use: True
+aux_criterion_margin: 0.2
+aux_criterion_weight: 0.4
+
+
+# Optimizer and Scheduler configs
+optimizer_base_lr: 0.001
+optimizer_weight_decay: 0.000001
+#scheduler_milestones: [5,10,20,30]
+scheduler_milestones: [2,4,6,8]
+scheduler_gamma: 0.33
+
+
+# Training configs
+#train_num_epochs: 35
+train_num_epochs: 10
+train_batch_size: 128

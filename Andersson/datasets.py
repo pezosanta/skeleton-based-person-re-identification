@@ -107,8 +107,12 @@ class BaseDataset():
         annotations.sort(key=lambda x: x["id"])
         
         # Min-Max normalizing 
-        xs = np.array([np.array(annotation["keypoints"][0::3])[self.tree_structure] for annotation in annotations]).flatten() / 1920
-        ys = np.array([np.array(annotation["keypoints"][1::3])[self.tree_structure] for annotation in annotations]).flatten() / 1080
+        if self.keypoints_num == len(self.tree_structure):
+            xs = np.array([np.array(annotation["keypoints"][0::3])[self.tree_structure] for annotation in annotations]).flatten() / 1920
+            ys = np.array([np.array(annotation["keypoints"][1::3])[self.tree_structure] for annotation in annotations]).flatten() / 1080
+        else:
+            xs = np.array([np.array(annotation["keypoints"][0::3]) for annotation in annotations]).flatten() / 1920
+            ys = np.array([np.array(annotation["keypoints"][1::3]) for annotation in annotations]).flatten() / 1080
         
         # Concatenating xs and ys in the following order: xs[0], ys[0], xs[1], ys[1], ...
         xys = np.ravel([xs,ys],'F')
@@ -244,10 +248,10 @@ class NegativePairLabel(Enum):
 
 
 class SiameseDataset(Dataset):
-    def __init__(self, dataset_type: DatasetType, num_exclude: int, window_size: int, shift_size: int, mode: TrainingMode = TrainingMode.SIAMESE, need_pair_dataset: bool = True, negative_pair_label=NegativePairLabel.CROSSENTROPY, use_tree_structure: bool = True):
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    def __init__(self, dataset_type: DatasetType, num_exclude: int, window_size: int, shift_size: int, mode: TrainingMode = TrainingMode.SIAMESE, need_pair_dataset: bool = True, negative_pair_label=NegativePairLabel.CROSSENTROPY, use_tree_structure: bool = True, use_scaled_dataset: bool = True):
+        self.dataset_type = dataset_type
         
-        self.base_dataset, _, _ = BaseDataset(dataset_type=dataset_type, num_exclude=num_exclude, window_size=window_size, shift_size=shift_size, mode=mode, use_tree_structure=use_tree_structure).get()
+        self.base_dataset, _, self.windows_num = BaseDataset(dataset_type=dataset_type, num_exclude=num_exclude, window_size=window_size, shift_size=shift_size, mode=mode, use_tree_structure=use_tree_structure, use_scaled_dataset=use_scaled_dataset).get()
 
         self.min_windows_num = self.get_min_windows_num(need_print=False)        
         
@@ -283,11 +287,17 @@ class SiameseDataset(Dataset):
 
 
     def _transform(self, person1_window, person2_window, label):
-                      
-        tensor_person1_window = torch.as_tensor(person1_window, dtype=torch.float32).to(device=self.device)
-        tensor_person2_window = torch.as_tensor(person2_window, dtype=torch.float32).to(device=self.device)
+        if (self.dataset_type == DatasetType.TRAINING) and (np.random.uniform() > 0.5):
+            person1_window = np.flip(person1_window, axis=0)
+        
+        if (self.dataset_type == DatasetType.TRAINING) and (np.random.uniform() > 0.5):
+            person2_window = np.flip(person2_window, axis=0)
 
-        tensor_label = torch.as_tensor(label, dtype=torch.float32).to(device=self.device)      
+                      
+        tensor_person1_window = torch.as_tensor(person1_window.copy(), dtype=torch.float32)
+        tensor_person2_window = torch.as_tensor(person2_window.copy(), dtype=torch.float32)
+
+        tensor_label = torch.as_tensor(label, dtype=torch.float32)     
 
         return tensor_person1_window, tensor_person2_window, tensor_label
 
@@ -314,11 +324,16 @@ class SiameseDataset(Dataset):
 
 
 
-    def n_over_k(self, n, k=2):
+    def _n_over_k(self, n, k=2):
         def factorial(n):
             return 1 if (n==1 or n==0) else n * factorial(n - 1)
-
-        return factorial(n)/(factorial(k)*factorial(n-k))
+        
+        if k == 2:
+            nok = n*(n-1)/k
+        else:
+            nok = factorial(n)/(factorial(k)*factorial(n-k))
+        
+        return nok
 
     
 
@@ -337,7 +352,7 @@ class SiameseDataset(Dataset):
         # The "+ self.min_windows_num" are pairs that contain the same windows
         # With (self.min_windows_num = 32), the shape of the positive pair array for each person: (527, 2, 40, 78)
         #self.min_windows_num = 32
-        num_pairs_per_person = int(self.n_over_k(n=self.min_windows_num) + self.min_windows_num)
+        num_pairs_per_person = int(self._n_over_k(n=self.min_windows_num) + self.min_windows_num)
 
         pos_pairs = np.zeros(shape=(len(self.base_dataset), num_pairs_per_person, 5), dtype=np.int)#40, 78))
         neg_pairs = np.zeros(shape=(len(self.base_dataset), num_pairs_per_person, 5), dtype=np.int)
@@ -364,27 +379,30 @@ class SiameseDataset(Dataset):
 
 if __name__=="__main__":
     
-    
+    '''
     ds = SupervisedDataset(dataset_type=DatasetType.VALIDATION, num_exclude=0, window_size=40, shift_size=1, mode=TrainingMode.SUPERVISED_LOGREG)
     
     print(ds.dataset.shape, ds.windows_num.shape[0])
 
     print(ds[0][0].shape, ds[1[0].shape])
     '''
-    ds = SiameseDataset(dataset_type=DatasetType.VALIDATION, num_exclude=0, window_size=40, shift_size=10, mode=TrainingMode.SIAMESE, need_pair_dataset=True, negative_pair_label=NegativePairLabel.COSINE_SIMILARITY)
 
+    
+    ds = SiameseDataset(dataset_type=DatasetType.VALIDATION, num_exclude=20, window_size=40, shift_size=10, mode=TrainingMode.SIAMESE, need_pair_dataset=True, negative_pair_label=NegativePairLabel.CROSSENTROPY)
+    print(ds.base_dataset[0].shape, ds.windows_num.shape[0])
     loader = DataLoader(dataset=ds, batch_size=10, shuffle=True)
 
     it = iter(loader)
     window1, window2, label = next(it)
 
-    print(window1.shape, window2.shape, label)
+    print(window1.shape, window2.shape, label.shape)
+    
 
     #print(ds.windows_num.shape)
     #print(ds.windows_num[60:100])
     #print(ds.get_class_weights()[60:100])
     #print(ds.get_class_weights()[60])
-    '''
+    
 
     '''
     for i, labels in enumerate(ds.base_labels):

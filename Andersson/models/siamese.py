@@ -17,7 +17,7 @@ class ModelMode(Enum):
 
 
 class SiameseCrossentropy(nn.Module): 
-    def __init__(self, model, model_output_size, latent_size, out_fc_size):
+    def __init__(self, model, model_output_size, latent_size, out_fc_size, latent_fc_dropout):
         super(SiameseCrossentropy, self).__init__()
 
         # Squared Eucledian distance, Cosine Similarity
@@ -30,9 +30,11 @@ class SiameseCrossentropy(nn.Module):
         )
         
         self.latent_fc = nn.Sequential(
-            nn.Linear(in_features=model_output_size, out_features=latent_size-self.additional_features),
-            nn.Sigmoid()
+            nn.Linear(in_features=model_output_size, out_features=latent_size-self.additional_features)
+            #nn.Sigmoid() #First two checkpoints need this 
         )
+
+        self.dropout = nn.Dropout(p=latent_fc_dropout)
         
         self.out_fc = nn.Sequential(
             nn.Linear(in_features=latent_size, out_features=out_fc_size),
@@ -66,9 +68,10 @@ class SiameseCrossentropy(nn.Module):
         d3 = torch.unsqueeze(self.cos(x1, x2), dim=1)                       # Cosine similarity
         x = torch.cat((d1, d2, d3), dim=1)
 
+        x = self.dropout(x)
         x = self.out_fc(x)
 
-        return x
+        return x, x1, x2
 
 
 
@@ -77,11 +80,13 @@ class SiameseCrossentropy(nn.Module):
 
 
 
+if __name__ == '__main__':
+    from models.bnlstm import BNLSTM
+    #model, model_output_size, latent_size, out_fc_size
+    model = BNLSTM(input_size=78, lstm_output_size=160)
+    siamese = SiameseCrossentropy(model=model, model_output_size=160, latent_size=32, out_fc_size=16).cuda()
+    x = torch.zeros((2, 40, 78)).cuda()
 
-from models.bnlstm import BNLSTM
-#model, model_output_size, latent_size, out_fc_size
-model = BNLSTM(input_size=78, lstm_output_size=160)
-siamese = SiameseCrossentropy(model=model, model_output_size=160, latent_size=32, out_fc_size=16).cuda()
-x = torch.zeros((2, 40, 78)).cuda()
+    print(siamese(x, -x, mode=ModelMode.TEST_CREATING_LABELS))
 
-print(siamese(x, -x, mode=ModelMode.TEST_CREATING_LABELS))
+

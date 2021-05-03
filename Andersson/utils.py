@@ -52,18 +52,31 @@ def colors_from_values(values):
 
 
 
-def create_metrics_figure(metric_array, xlabel, ylabel, title, threshold=None):
+# Setting newperson to True when creating metric figures for Siamese testing
+def create_metrics_figure(metric_array, xlabel, ylabel, title, threshold=None, newperson=False):
     df = pd.DataFrame(metric_array.reshape(-1, len(metric_array)), columns=[str(i) for i in range(1, len(metric_array)+1)])
 
     figure = plt.figure(figsize=(20, 10))
 
     ax = sns.barplot(data=df, palette=colors_from_values(metric_array))
 
-    # Keeping only every 4 x label
+    # Modifying the last xtick label to New (NewPerson is too long)
+    if newperson:
+        labels = [item.get_text() for item in ax.get_xticklabels()]
+        labels[-1] = 'New'
+        ax.set_xticklabels(labels)
+    
+    # Keeping only every 4 xlabel (and the NewPerson xlabel)
+    num_xtick_labels = len(ax.xaxis.get_ticklabels())
     for index, label in enumerate(ax.xaxis.get_ticklabels()):
-        if index % 4 != 1:
-            label.set_visible(False)
-
+        
+        if not newperson:
+            if index % 4 != 1:
+                label.set_visible(False)
+        else:
+            if index % 4 != 1 and index != (num_xtick_labels - 1):
+                label.set_visible(False)
+    
     if threshold is not None:
         plt.yticks([tick for tick in list(plt.yticks()[0]) if abs(tick-threshold)>30] + [threshold])
         plt.axhline(y=threshold, color='k', linestyle='-')
