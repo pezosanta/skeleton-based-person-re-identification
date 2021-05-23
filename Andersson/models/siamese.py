@@ -63,7 +63,8 @@ class SiameseCrossentropy(nn.Module):
             x2 = self.model(x2)
             x2 = self.latent_fc(x2)
 
-        d1 = torch.abs(x1 - x2)                                             # Elementwise L1 distance
+        d1 = torch.abs(x1 - x2)                                            # Elementwise L1 distance
+        #d1 = torch.sqrt(torch.pow((x1 - x2), 2))                            # Elementwise Euclidean distance                 
         d2 = torch.unsqueeze((torch.sum(((x1 - x2)**2), dim=1)), dim=1)     # Squared Eucledian distance
         d3 = torch.unsqueeze(self.cos(x1, x2), dim=1)                       # Cosine similarity
         x = torch.cat((d1, d2, d3), dim=1)

@@ -4,3 +4,6 @@ scaled_path: '../../../datasets/Andersson/kinect_gait_json_dataset_scaled/'
 training: 'train/'
 validation: 'val/'
 test: 'test/'
+
+ssl_supervised_training: 'ssl_train/supervised/'
+ssl_self-supervised_training: 'ssl_train/self_supervised/'

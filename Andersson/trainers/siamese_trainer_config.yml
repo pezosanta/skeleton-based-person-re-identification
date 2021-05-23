@@ -1,7 +1,7 @@
 # Dataset config
 dataset_window_size: 40
 dataset_shift_size: 10
-dataset_num_exclude: 100
+dataset_num_exclude: 20
 dataset_use_tree_structure: True
 dataset_use_scaled: True
 
@@ -20,8 +20,8 @@ siamese_latent_dropout: 0.5
 
 # Auxiliary loss function config
 aux_criterion_use: True
-aux_criterion_margin: 0.2
-aux_criterion_weight: 0.4
+aux_criterion_margin: 0.5
+aux_criterion_weight: 0.5
 
 
 # Optimizer and Scheduler configs
@@ -36,3 +36,11 @@ scheduler_gamma: 0.33
 #train_num_epochs: 35
 train_num_epochs: 10
 train_batch_size: 128
+
+
+# Pretrain configs
+pretrained_use: True
+checkpoint_paths: [
+  "model_checkpoints/supervised/2021.05.01-18:13:35-epochs_51-bs_128-dsWS_40-dsSS_1-dsNE_100-dsUS_True-dsUTS_True-model_BNLSTM-modelHS_256-modelNL2-modelDOUT_0.5-loss_CrossEntropyLoss-lossUW_True-opt_Adam-optLR_0.001-optWD_1e-06-sched_MultiStepLR-schedMS_[20, 40, 60, 80]-schedGAM_0.33/epoch=48-val_acc_epoch=0.8361.ckpt", #256_40_NE100
+  "model_checkpoints/supervised/2021.05.08-17:30:51-epochs_51-bs_128-dsWS_40-dsSS_1-dsNE_20-dsUS_True-dsUTS_True-model_BNLSTM-modelHS_256-modelNL2-modelDOUT_0.5-loss_CrossEntropyLoss-lossUW_True-opt_Adam-optLR_0.001-optWD_1e-06-sched_MultiStepLR-schedMS_[20, 40, 60, 80]-schedGAM_0.33/epoch=49-val_acc_epoch=0.8147.ckpt", #256_40_NE20
+]

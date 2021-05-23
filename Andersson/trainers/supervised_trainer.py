@@ -19,6 +19,7 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 from models.logistic_regression import LogisticRegression
 from models.bnlstm import BNLSTM
 from models.lstm import LSTM
+from models.self_supervised import SelfSupervised
 from datasets import DatasetType, TrainingMode, SupervisedDataset
 from utils import create_cm_figure
 
@@ -39,9 +40,8 @@ class SupervisedModel(LightningModule):
 
         self.configs = yaml.safe_load(open('trainers/supervised_trainer_config.yml').read())
         
-        
         self.train_dataset = SupervisedDataset(
-            dataset_type=DatasetType.TRAINING,
+            dataset_type=DatasetType.SSL_SUPERVISED_TRAINING,
             window_size=self.configs['dataset_window_size'],
             shift_size=self.configs['dataset_shift_size'],
             num_exclude=self.configs['dataset_num_exclude'],
@@ -60,7 +60,7 @@ class SupervisedModel(LightningModule):
             use_scaled_dataset=self.configs['dataset_use_scaled']
         )
         
-        
+        '''
         self.model = BNLSTM(
             input_size=self.train_dataset.dataset.shape[2],
             lstm_output_size=self.train_dataset.windows_num.shape[0],
@@ -68,6 +68,22 @@ class SupervisedModel(LightningModule):
             n_layers=self.configs['bnlstm_n_layers'],
             dropout=self.configs['bnlstm_dropout']
         )
+        '''
+
+        self.model = SelfSupervised(
+            input_size=self.train_dataset.dataset.shape[2],
+            window_size=self.configs['dataset_window_size'],
+            lstm_output_size=self.train_dataset.windows_num.shape[0],
+            hidden_size=self.configs['bnlstm_hidden_size'],
+            n_layers=self.configs['bnlstm_n_layers'],
+            dropout=self.configs['bnlstm_dropout'],
+            supervised_mode=True
+        )
+
+        self.model_checkpoint_path = self.configs['checkpoint_paths'][2] 
+        self.model_checkpoint = self._prepare_checkpoint()
+        self.model.load_state_dict(self.model_checkpoint, strict=True)
+        #self.model.to(device=self.device_type)
         
         '''
         self.model = LSTM(
@@ -92,6 +108,23 @@ class SupervisedModel(LightningModule):
 
         self.optimizer = optim.Adam(self.parameters(), lr=self.configs['optimizer_base_lr'], weight_decay=self.configs['optimizer_weight_decay'])
         self.lr_scheduler = optim.lr_scheduler.MultiStepLR(optimizer=self.optimizer, milestones=self.configs['scheduler_milestones'], gamma=self.configs['scheduler_gamma'])
+
+
+
+    def _prepare_checkpoint(self):
+        model_checkpoint = torch.load(self.model_checkpoint_path)['state_dict']
+
+        '''
+        if self.model.__class__.__name__ != 'LogisticRegression':
+            # Delete loss weights from the dictionary
+            model_checkpoint.pop('criterion.weight')
+        '''
+        
+        # Creating a new checkpoint_state_dict with matching key names with the model_state_dict
+        delete_prefix_len = len('model.')
+        adapted_model_checkpoint = {key[delete_prefix_len:]: value for key, value in model_checkpoint.items()}
+
+        return adapted_model_checkpoint
 
        
 
@@ -120,6 +153,7 @@ class SupervisedModel(LightningModule):
                     f"Dataset number of excluded person: {self.configs['dataset_num_exclude']}\n\n" \
                     f"Dataset using scaled dataset: {self.configs['dataset_use_scaled']}\n\n" \
                     f"Dataset using tree structure: {self.configs['dataset_use_tree_structure']}\n\n" \
+                    f"Dataset using Self-Supervised training dataset: {self.configs['dataset_use_ssl']}\n\n" \
 
                     f"Model: {self.model.__class__.__name__}\n\n" \
                     f"Model hidden size: {self.configs['bnlstm_hidden_size']}\n\n" \
@@ -278,6 +312,7 @@ class SupervisedModel(LightningModule):
                                 f"dsNE_{self.configs['dataset_num_exclude']}-" \
                                 f"dsUS_{self.configs['dataset_use_scaled']}-" \
                                 f"dsUTS_{self.configs['dataset_use_tree_structure']}-" \
+                                f"dsUSSL_{self.configs['dataset_use_ssl']}-" \
                                 f"model_{model_name}-" \
                                 f"modelHS_{self.configs['bnlstm_hidden_size']}-" \
                                 f"modelNL{self.configs['bnlstm_n_layers']}-" \
@@ -285,11 +320,8 @@ class SupervisedModel(LightningModule):
                                 f"loss_{loss_name}-" \
                                 f"lossUW_{self.configs['loss_use_weight']}-" \
                                 f"opt_{self.optimizer.__class__.__name__}-" \
-                                f"optLR_{self.configs['optimizer_base_lr']}-" \
-                                f"optWD_{self.configs['optimizer_weight_decay']}-" \
-                                f"sched_{self.lr_scheduler.__class__.__name__}-" \
-                                f"schedMS_{self.configs['scheduler_milestones']}-" \
-                                f"schedGAM_{self.configs['scheduler_gamma']}"
+                                f"sched_{self.lr_scheduler.__class__.__name__}"
+                                
         
         logger = TensorBoardLogger(save_dir=save_dir, name=self.logger_subdir, version=self.logger_run_name, default_hp_metric=False, log_graph=False)
         

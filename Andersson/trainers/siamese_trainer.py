@@ -1,3 +1,4 @@
+from torch._C import device
 import yaml
 import random
 import numpy as np
@@ -18,6 +19,7 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 
 from models.bnlstm import BNLSTM
 from models.siamese import ModelMode, SiameseCrossentropy
+from losses import ContrastiveLoss
 from datasets import DatasetType, TrainingMode, NegativePairLabel, SiameseDataset
 from utils import create_cm_figure
 
@@ -71,6 +73,11 @@ class SiameseModel(LightningModule):
                 dropout=self.configs['bnlstm_dropout']
         )
 
+        if self.configs['pretrained_use']:
+            self.core_model_checkpoint_path = self.configs['checkpoint_paths'][1]    
+            self.core_model_checkpoint = self._prepare_checkpoint()
+            core_model.load_state_dict(self.core_model_checkpoint, strict=True)
+        
         self.model = SiameseCrossentropy(
             model=core_model,
             model_output_size=self.train_dataset.windows_num.shape[0],
@@ -81,11 +88,25 @@ class SiameseModel(LightningModule):
 
         if self.configs['aux_criterion_use']:
             self.aux_criterion_weight = self.configs['aux_criterion_weight']
-            self.aux_criterion = nn.CosineEmbeddingLoss(margin=self.configs['aux_criterion_margin'])
-        self.criterion = nn.BCELoss()
+            self.aux_criterion = nn.CosineEmbeddingLoss(margin=self.configs['aux_criterion_margin']).to(device=self.device_type)
+            #self.aux_criterion = ContrastiveLoss(margin=self.configs['aux_criterion_margin']).to(device=self.device_type)
+        self.criterion = nn.BCELoss().to(device=self.device_type)
 
         self.optimizer = optim.Adam(self.parameters(), lr=self.configs['optimizer_base_lr'], weight_decay=self.configs['optimizer_weight_decay'])
         self.lr_scheduler = optim.lr_scheduler.MultiStepLR(optimizer=self.optimizer, milestones=self.configs['scheduler_milestones'], gamma=self.configs['scheduler_gamma'])
+
+
+
+    def _prepare_checkpoint(self):
+        model_checkpoint = torch.load(self.core_model_checkpoint_path)['state_dict']
+
+        model_checkpoint.pop('criterion.weight')
+
+        # Creating a new checkpoint_state_dict with matching key names with the model_state_dict
+        delete_prefix_len = len('model.')
+        adapted_model_checkpoint = {key[delete_prefix_len:]: value for key, value in model_checkpoint.items()}
+
+        return adapted_model_checkpoint
 
 
 
@@ -129,6 +150,7 @@ class SiameseModel(LightningModule):
                     f"BNLSTM hidden size: {self.configs['bnlstm_hidden_size']}\n\n" \
                     f"BNLSTM number of layers: {self.configs['bnlstm_n_layers']}\n\n" \
                     f"BNLSTM dropout value: {self.configs['bnlstm_dropout']}\n\n" \
+                    f"BNLSTM pretrained: {self.configs['pretrained_use']}\n\n" \
                     
                     f"Loss type: {self.criterion.__class__.__name__}\n\n" \
                     f"{aux_loss_log}\n\n" \
@@ -158,8 +180,9 @@ class SiameseModel(LightningModule):
 
         if self.configs['aux_criterion_use']:
             # CosineEmbeddingLoss needs label=-1.0 instead of 0.0 for negative pairs
-            y_aux = y.clone()
-            y_aux[y_aux==0.0] = -1.0   
+            y_aux = y.clone()            
+            if self.aux_criterion.__class__.__name__ == "CosineEmbeddingLoss":
+                y_aux[y_aux==0.0] = -1.0     
                  
             aux_loss = self.aux_criterion(x1, x2, y_aux)
 
@@ -217,7 +240,9 @@ class SiameseModel(LightningModule):
         if self.configs['aux_criterion_use']:
             # CosineEmbeddingLoss needs label=-1.0 instead of 0.0 for negative pairs
             y_aux = y.clone()
-            y_aux[y_aux==0.0] = -1.0        
+            if self.aux_criterion.__class__.__name__ == "CosineEmbeddingLoss":
+                y_aux[y_aux==0.0] = -1.0       
+             
             aux_loss = self.aux_criterion(x1, x2, y_aux)
 
             loss = loss + self.aux_criterion_weight*aux_loss
@@ -279,7 +304,7 @@ class SiameseModel(LightningModule):
         loss_name = f"{self.criterion.__class__.__name__}" if self.criterion.__class__.__name__ != "BCEWithLogitsLoss" else "BCEWLL"
 
         if self.configs['aux_criterion_use'] == True:
-            aux_loss_name = f"Cos" if self.aux_criterion.__class__.__name__ == "CosineEmbeddingLoss" else None
+            aux_loss_name = f"Cos" if self.aux_criterion.__class__.__name__ == "CosineEmbeddingLoss" else "Contr"
             aux_loss_log =  f"auxLoss_{aux_loss_name}-" \
                             f"auxLossM_{self.configs['aux_criterion_margin']}-" \
                             f"auxLossW_{self.configs['aux_criterion_weight']}"
@@ -301,8 +326,9 @@ class SiameseModel(LightningModule):
                                 f"modelOFS_{self.configs['siamese_out_fc_size']}-" \
                                 f"modelLDOUT_{self.configs['siamese_latent_dropout']}-" \
                                 f"bnlstmHS_{self.configs['bnlstm_hidden_size']}-" \
-                                f"bnlstmNL{self.configs['bnlstm_n_layers']}-" \
+                                f"bnlstmNL_{self.configs['bnlstm_n_layers']}-" \
                                 f"bnlstmDOUT_{self.configs['bnlstm_dropout']}-" \
+                                f"bnlstmPRE_{self.configs['pretrained_use']}-" \
                                 f"loss_{loss_name}-" \
                                 f"{aux_loss_log}" 
         '''

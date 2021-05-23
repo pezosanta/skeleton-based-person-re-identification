@@ -83,7 +83,7 @@ class SiameseTester:
         #self.model_checkpoint = 'model_params/siamese_network/version_6_bs_512_baselr_3e-3_multisteplr_milestones_5-10-15-25_gamma_0.33_lstmoutsize_160-latentsize_32-outfcsize_16-abs+cos+sed/version-6-siamese-epoch=33-val_acc_epoch=0.9358.ckpt'
         #self.model = SiameseNetwork().load_from_checkpoint(checkpoint_path=self.model_checkpoint).to(device_type=self.device_type).eval()
         #self.model_checkpoint_path = "./model_checkpoints/supervised/2021.04.28-23:35:56-epochs_51-bs_128-dsWS_40-dsSS_1-dsNE_0-dsUS_True-dsUTS_True-model_BNLSTM-modelHS_256-modelNL2-modelDOUT_0.5-loss_CrossEntropyLoss-lossUW_True-opt_Adam-optLR_0.001-optWD_1e-06-sched_MultiStepLR-schedMS_[20, 40, 60, 80]-schedGAM_0.33/epoch=43-val_acc_epoch=0.8081.ckpt"
-        self.model_checkpoint_path = self.configs['checkpoint_paths'][3]    
+        self.model_checkpoint_path = self.configs['checkpoint_paths'][-7]    
         self.model_checkpoint = self._prepare_checkpoint()
         
         core_model = BNLSTM(
@@ -104,6 +104,8 @@ class SiameseTester:
 
         self.model.load_state_dict(self.model_checkpoint, strict=True)
         self.model.to(device=self.device_type).eval()
+
+        self.save_eps = self.configs['save_eps']
 
 
 
@@ -140,7 +142,7 @@ class SiameseTester:
 
     def start(self):
         for similarity_thres in self.configs['similarity_thres']:
-            for averaging_type in list(AveragingType):
+            for averaging_type in list(AveragingType)[1:]:
                 print(f'\n\nTesting with [similarity threshold = {similarity_thres}] | [averaging type = {averaging_type.value}] ...')
 
                 self.similarity_thres = similarity_thres
@@ -248,38 +250,19 @@ class SiameseTester:
 
     
     def _log_metrics(self, metrics, dataset_type):
-        dir_path = f"test_logs/siamese/{self.model_checkpoint_path.rsplit('/', 2)[1]}/{dataset_type.value}/simthresh_{self.similarity_thres}-avgtype_{self.averaging_type.value}/"
+        dir_path = f"test_logs/siamese/{self.model_checkpoint_path.rsplit('/', 2)[1]}/{self.model_checkpoint_path.rsplit('/', 2)[2]}/{dataset_type.value}/simthresh_{self.similarity_thres}-avgtype_{self.averaging_type.value}/"
         png_path = dir_path + "png/"
         eps_path = dir_path + "eps/"
         
-        if not os.path.exists(path=dir_path):
+        #if not os.path.exists(path=dir_path):
+        if not os.path.exists(path=png_path):
             os.makedirs(png_path)
+            #if self.save_eps:
+             #   os.makedirs(eps_path)
+        
+
+        if not os.path.exists(path=eps_path):
             os.makedirs(eps_path)
-        
-        cm_figure = create_cm_figure(cm=metrics['confusion_matrix'], class_names=[f'Person{i:03d}' for i in range(self.database.shape[0])] + ['NewPerson'])
-        plt.savefig(f'{png_path}confusion_matrix.png')
-        plt.savefig(f'{eps_path}confusion_matrix.eps')
-        plt.close()
-        
-        classwise_acc_figure = create_metrics_figure(metric_array=metrics['classwise_acc'], xlabel="Person indices", ylabel="Accuracy score", title=f"Classwise accuracy score", newperson=True)
-        plt.savefig(f'{png_path}classwise_acc.png')
-        plt.savefig(f'{eps_path}classwise_acc.eps')
-        plt.close()
-
-        classwise_prec_figure = create_metrics_figure(metric_array=metrics['classwise_prec'], xlabel="Person indices", ylabel="Precision score", title=f"Classwise precision score", newperson=True)
-        plt.savefig(f'{png_path}classwise_prec.png')
-        plt.savefig(f'{eps_path}classwise_prec.eps')
-        plt.close()
-
-        classwise_recall_figure = create_metrics_figure(metric_array=metrics['classwise_recall'], xlabel="Person indices", ylabel="Recall score", title=f"Classwise recall score", newperson=True)
-        plt.savefig(f'{png_path}classwise_recall.png')
-        plt.savefig(f'{eps_path}classwise_recall.eps')
-        plt.close()
-
-        classwise_f1_figure = create_metrics_figure(metric_array=metrics['classwise_f1'], xlabel="Person indices", ylabel="F1 score", title=f"Classwise F1 score", newperson=True)
-        plt.savefig(f'{png_path}classwise_f1.png')
-        plt.savefig(f'{eps_path}classwise_f1.eps')
-        plt.close()
 
         # Logging metrics into file
         with open(f"{dir_path}metrics.txt", 'w') as f:
@@ -295,6 +278,36 @@ class SiameseTester:
                     f"Weighted recall score: {metrics['weighted_recall']}\n" \
                     f"Weighted F1 score: {metrics['weighted_f1']}"
                     )
+        '''
+        cm_figure = create_cm_figure(cm=metrics['confusion_matrix'], class_names=[f'Person{i:03d}' for i in range(self.database.shape[0])] + ['NewPerson'])
+        plt.savefig(f'{png_path}confusion_matrix.png')
+        if self.save_eps:
+            plt.savefig(f'{eps_path}confusion_matrix.eps')
+        plt.close()
+        '''
+        classwise_acc_figure = create_metrics_figure(metric_array=metrics['classwise_acc'], xlabel="Person indices", ylabel="Accuracy score", title=f"Classwise accuracy score", newperson=True)
+        plt.savefig(f'{png_path}classwise_acc.png')
+        if self.save_eps:
+            plt.savefig(f'{eps_path}classwise_acc.eps')
+        plt.close()
+
+        classwise_prec_figure = create_metrics_figure(metric_array=metrics['classwise_prec'], xlabel="Person indices", ylabel="Precision score", title=f"Classwise precision score", newperson=True)
+        plt.savefig(f'{png_path}classwise_prec.png')
+        if self.save_eps:
+            plt.savefig(f'{eps_path}classwise_prec.eps')
+        plt.close()
+
+        classwise_recall_figure = create_metrics_figure(metric_array=metrics['classwise_recall'], xlabel="Person indices", ylabel="Recall score", title=f"Classwise recall score", newperson=True)
+        plt.savefig(f'{png_path}classwise_recall.png')
+        if self.save_eps:
+            plt.savefig(f'{eps_path}classwise_recall.eps')
+        plt.close()
+
+        classwise_f1_figure = create_metrics_figure(metric_array=metrics['classwise_f1'], xlabel="Person indices", ylabel="F1 score", title=f"Classwise F1 score", newperson=True)
+        plt.savefig(f'{png_path}classwise_f1.png')
+        if self.save_eps:
+            plt.savefig(f'{eps_path}classwise_f1.eps')
+        plt.close()
 
 
 

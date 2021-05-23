@@ -1,9 +1,10 @@
 # Dataset config
 dataset_window_size: 40
 dataset_shift_size: 1
-dataset_num_exclude: 100
+dataset_num_exclude: 0
 dataset_use_tree_structure: True
 dataset_use_scaled: True
+dataset_use_ssl: True
 
 
 # BNLSTM model config
@@ -28,4 +29,14 @@ train_num_epochs: 51
 train_batch_size: 128
 train_cm_epoch_interval: 10
 
+
+# Saving configs
+checkpoint_paths: [
+  "model_checkpoints/ssl_pretraining/2021.05.12-19:26:48-epochs_51-bs_128-dsWS_40-dsSS_1-dsNE_0-dsUS_True-dsUTS_True-model_SelfSupervised-modelHS_256-modelNL2-modelDOUT_0.5-loss_MSELoss-opt_Adam-sched_MultiStepLR/epoch=50-val_loss_epoch=0.0013.ckpt",  # Epochs:51, ratio: 0.8
+  "model_checkpoints/ssl_pretraining/2021.05.13-05:06:28-epochs_101-bs_128-dsWS_40-dsSS_1-dsNE_0-dsUS_True-dsUTS_True-model_SelfSupervised-modelHS_256-modelNL2-modelDOUT_0.5-loss_MSELoss-opt_Adam-sched_MultiStepLR/epoch=43-val_loss_epoch=0.0003.ckpt", # Epochs:51, ratio: 0.95
+  "model_checkpoints/ssl_pretraining/2021.05.13-16:22:43-epochs_51-bs_128-dsWS_40-dsSS_1-dsNE_0-dsUS_True-dsUTS_True-model_SelfSupervised-modelHS_256-modelNL2-modelDOUT_0.5-loss_MSELoss-opt_Adam-sched_MultiStepLR/epoch=40-val_loss_epoch=0.0008.ckpt", # Epochs:51, ratio: 0.6
+
+  "model_checkpoints/ssl_pretraining/2021.05.13-00:30:42-epochs_101-bs_128-dsWS_40-dsSS_1-dsNE_0-dsUS_True-dsUTS_True-model_SelfSupervised-modelHS_256-modelNL2-modelDOUT_0.5-loss_MSELoss-opt_Adam-sched_MultiStepLR/epoch=90-val_loss_epoch=0.0013.ckpt", # Epochs:101, ratio: 0.8
+  "model_checkpoints/ssl_pretraining/2021.05.13-05:06:28-epochs_101-bs_128-dsWS_40-dsSS_1-dsNE_0-dsUS_True-dsUTS_True-model_SelfSupervised-modelHS_256-modelNL2-modelDOUT_0.5-loss_MSELoss-opt_Adam-sched_MultiStepLR/epoch=90-val_loss_epoch=0.0002.ckpt"  # Epochs:101, ratio: 0.95
+]
 

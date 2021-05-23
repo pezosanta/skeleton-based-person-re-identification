@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 
 
 def create_cm_figure(cm, class_names):        
-        figure = plt.figure(figsize=(80, 80))
+        figure = plt.figure(figsize=(30, 30)) if cm.shape[0] <= 61 else plt.figure(figsize=(80, 80)) 
 
         plt.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
         
@@ -28,7 +28,7 @@ def create_cm_figure(cm, class_names):
 
         for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
             color = "white" if cm[i, j] > threshold else "black"
-            plt.text(j, i, cm[i, j], horizontalalignment="center", color=color)
+            plt.text(j, i, cm[i, j], horizontalalignment="center", color=color, fontsize='medium')
             
         plt.tight_layout()
 
@@ -42,13 +42,21 @@ def create_cm_figure(cm, class_names):
 
 def colors_from_values(values):
     # normalize the values to range [0, 1]
-    normalized = (values - min(values)) / (max(values) - min(values))
+    #normalized = (values - min(values)) / (max(values) - min(values))
     # convert to indices
-    indices = np.round(normalized * (len(values) - 1)).astype(np.int32)
+    #indices = np.round(normalized * (len(values) - 1)).astype(np.int32)
     # use the indices to get the colors
-    palette = sns.diverging_palette(h_neg=240, h_pos=10, center="light", n=len(values), s=100,  l=50)
+    #palette = sns.diverging_palette(h_neg=240, h_pos=10, center="dark", n=len(values), s=100,  l=50)
     #palette = sns.color_palette('Reds', len(values))
-    return np.array(palette).take(indices, axis=0)
+
+    clrs = ['indianred' if (x == max(values)) else 'darkred' for x in values ]
+
+    return clrs
+
+    #rank = values.argsort().argsort()
+    #return np.array(palette[::-1])[rank]
+
+    #return np.array(palette).take(indices, axis=0)
 
 
 
@@ -69,7 +77,6 @@ def create_metrics_figure(metric_array, xlabel, ylabel, title, threshold=None, n
     # Keeping only every 4 xlabel (and the NewPerson xlabel)
     num_xtick_labels = len(ax.xaxis.get_ticklabels())
     for index, label in enumerate(ax.xaxis.get_ticklabels()):
-        
         if not newperson:
             if index % 4 != 1:
                 label.set_visible(False)
@@ -79,11 +86,13 @@ def create_metrics_figure(metric_array, xlabel, ylabel, title, threshold=None, n
     
     if threshold is not None:
         plt.yticks([tick for tick in list(plt.yticks()[0]) if abs(tick-threshold)>30] + [threshold])
-        plt.axhline(y=threshold, color='k', linestyle='-')
+        plt.axhline(y=threshold, color='k', linestyle='-', linewidth=4)
     
-    plt.title(label=title)
-    plt.xlabel(xlabel=xlabel)
-    plt.ylabel(ylabel=ylabel)
+    plt.xticks(fontsize='x-large')
+    plt.yticks(fontsize='x-large')
+    plt.title(label=title, fontsize='xx-large')
+    plt.xlabel(xlabel=xlabel, fontsize='xx-large')
+    plt.ylabel(ylabel=ylabel, fontsize='xx-large')
 
     plt.tight_layout()
 

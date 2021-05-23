@@ -15,6 +15,8 @@ class DatasetType(Enum):
     TRAINING = 'training'
     VALIDATION = 'validation'
     TEST = 'test'
+    SSL_SUPERVISED_TRAINING = 'ssl_supervised_training'
+    SSL_SELF_SUPERVISED_TRAINING = 'ssl_self-supervised_training'
 
 
 
@@ -198,7 +200,14 @@ class SupervisedDataset(Dataset):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.dataset_type = dataset_type
         
-        self.dataset, self.labels, self.windows_num = BaseDataset(dataset_type=dataset_type, num_exclude=num_exclude, window_size=window_size, shift_size=shift_size, mode=mode, use_tree_structure=use_tree_structure, use_scaled_dataset=use_scaled_dataset).get()
+        self.dataset, self.labels, self.windows_num = BaseDataset(  dataset_type=dataset_type,
+                                                                    num_exclude=num_exclude,
+                                                                    window_size=window_size, 
+                                                                    shift_size=shift_size, 
+                                                                    mode=mode, 
+                                                                    use_tree_structure=use_tree_structure, 
+                                                                    use_scaled_dataset=use_scaled_dataset
+                                                                ).get()
 
     
     
@@ -239,11 +248,56 @@ class SupervisedDataset(Dataset):
 
 
 
+
+class SelfSupervisedDataset(Dataset):
+    def __init__(self, dataset_type: DatasetType, num_exclude: int, window_size: int, shift_size: int, mode: TrainingMode = TrainingMode.SUPERVISED, use_tree_structure: bool = True, use_scaled_dataset: bool = True):
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.dataset_type = dataset_type
+        
+        self.dataset, self.labels, self.windows_num = BaseDataset(  dataset_type=dataset_type,
+                                                                    num_exclude=num_exclude,
+                                                                    window_size=window_size, 
+                                                                    shift_size=shift_size, 
+                                                                    mode=mode, 
+                                                                    use_tree_structure=use_tree_structure, 
+                                                                    use_scaled_dataset=use_scaled_dataset
+                                                                ).get()
+
+    
+    
+    def __getitem__(self, index):
+        current_numpy_input_window = self.dataset[index]
+
+        current_tensor_input_window, current_tensor_target_window = self._transform(current_numpy_input_window=current_numpy_input_window)
+
+        return current_tensor_input_window, current_tensor_target_window
+
+
+
+    def __len__(self):
+        return self.dataset.shape[0]
+
+
+
+    def _transform(self, current_numpy_input_window):
+        current_numpy_target_window = current_numpy_input_window.copy()
+        current_numpy_target_window = np.flip(current_numpy_target_window, axis=0)
+
+        current_tensor_input_window = torch.as_tensor(current_numpy_input_window, dtype=torch.float32)#.to(device=self.device)
+        current_tensor_target_window = torch.as_tensor(current_numpy_target_window.copy(), dtype=torch.float32)#.to(device=self.device)              
+
+        return current_tensor_input_window, current_tensor_target_window
+
+
+
+
+
+
 class NegativePairLabel(Enum):
     CROSSENTROPY = 0
     COSINE_SIMILARITY = -1
     MARGIN = -1
-    CONTRASTIVE = -1
+    CONTRASTIVE = 0
 
 
 
@@ -287,10 +341,10 @@ class SiameseDataset(Dataset):
 
 
     def _transform(self, person1_window, person2_window, label):
-        if (self.dataset_type == DatasetType.TRAINING) and (np.random.uniform() > 0.5):
+        if (self.dataset_type == DatasetType.TRAINING) and self.need_pair_dataset and (np.random.uniform() > 0.5):
             person1_window = np.flip(person1_window, axis=0)
         
-        if (self.dataset_type == DatasetType.TRAINING) and (np.random.uniform() > 0.5):
+        if (self.dataset_type == DatasetType.TRAINING) and self.need_pair_dataset and (np.random.uniform() > 0.5):
             person2_window = np.flip(person2_window, axis=0)
 
                       
@@ -378,17 +432,37 @@ class SiameseDataset(Dataset):
 
 
 if __name__=="__main__":
+    ds = SupervisedDataset(dataset_type=DatasetType.SSL_SUPERVISED_TRAINING, num_exclude=0, window_size=40, shift_size=1, mode=TrainingMode.SUPERVISED)
     
-    '''
-    ds = SupervisedDataset(dataset_type=DatasetType.VALIDATION, num_exclude=0, window_size=40, shift_size=1, mode=TrainingMode.SUPERVISED_LOGREG)
-    
-    print(ds.dataset.shape, ds.windows_num.shape[0])
+    print(ds.dataset.shape, ds.windows_num.shape[0])   
 
-    print(ds[0][0].shape, ds[1[0].shape])
     '''
+    from torch.utils.data import Subset
+    dataset = SelfSupervisedDataset(
+            dataset_type=DatasetType.SSL_SELF_SUPERVISED_TRAINING,
+            window_size=40,
+            shift_size=1,
+            num_exclude=0,
+            mode=TrainingMode.SUPERVISED,
+            use_tree_structure=True,
+            use_scaled_dataset=True
+        )
 
+    train_ds = Subset(dataset=dataset, indices=list(range(int(0.8*dataset.dataset.shape[0]))))
+    val_ds = Subset(dataset=dataset, indices=list(range(int(0.8*dataset.dataset.shape[0]), dataset.dataset.shape[0])))
+
+    print(len(dataset), dataset[100][0].shape, dataset[100][1].shape)
+    print(len(train_ds), train_ds[100][0].shape, train_ds[100][1].shape)
+    print(len(val_ds), val_ds[100][0].shape, val_ds[100][1].shape)
+    '''
+    '''
+    for i in [40, 20, 10, 5]:
+        ds = SupervisedDataset(dataset_type=DatasetType.TEST, num_exclude=100, window_size=i, shift_size=1, mode=TrainingMode.SUPERVISED)
     
-    ds = SiameseDataset(dataset_type=DatasetType.VALIDATION, num_exclude=20, window_size=40, shift_size=10, mode=TrainingMode.SIAMESE, need_pair_dataset=True, negative_pair_label=NegativePairLabel.CROSSENTROPY)
+        print(ds.dataset.shape, ds.windows_num.shape[0])   
+    '''
+    '''
+    ds = SiameseDataset(dataset_type=DatasetType.TRAINING, num_exclude=100, window_size=40, shift_size=5, mode=TrainingMode.SIAMESE, need_pair_dataset=True, negative_pair_label=NegativePairLabel.CROSSENTROPY)
     print(ds.base_dataset[0].shape, ds.windows_num.shape[0])
     loader = DataLoader(dataset=ds, batch_size=10, shuffle=True)
 
@@ -402,7 +476,7 @@ if __name__=="__main__":
     #print(ds.windows_num[60:100])
     #print(ds.get_class_weights()[60:100])
     #print(ds.get_class_weights()[60])
-    
+    '''
 
     '''
     for i, labels in enumerate(ds.base_labels):
